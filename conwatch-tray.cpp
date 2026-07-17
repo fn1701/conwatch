@@ -180,9 +180,14 @@ private:
         pix.fill(Qt::transparent);
         QPainter p(&pix);
         p.setRenderHint(QPainter::Antialiasing);
-        p.setBrush(qc);
-        p.setPen(QColor(0, 0, 0, 60));
-        p.drawEllipse(2, 2, 18, 18);
+        p.setRenderHint(QPainter::TextAntialiasing);
+
+        QFont font = p.font();
+        font.setBold(true);
+        font.setPixelSize(16);
+        p.setFont(font);
+        p.setPen(qc);
+        p.drawText(pix.rect(), Qt::AlignCenter, "4");
         p.end();
 
         m_tray->setIcon(QIcon(pix));

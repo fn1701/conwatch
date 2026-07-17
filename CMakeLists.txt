@@ -20,3 +20,18 @@ add_executable(conwatch
 target_link_libraries(conwatch PRIVATE yaml-cpp::yaml-cpp)
 # Deliberately no Qt linkage here -- the watcher is a lean POSIX daemon
 # that spawns the Qt-based conwatch-tray binary as a child process.
+
+option(CONWATCH_BUILD_TESTS "Build the gtest unit test suite" OFF)
+if(CONWATCH_BUILD_TESTS)
+    find_package(GTest REQUIRED)
+    enable_testing()
+
+    add_executable(conwatch_tests
+        tests/config_test.cpp
+        watcher/config.cpp
+    )
+    target_link_libraries(conwatch_tests PRIVATE yaml-cpp::yaml-cpp GTest::gtest GTest::gtest_main)
+
+    include(GoogleTest)
+    gtest_discover_tests(conwatch_tests)
+endif()

@@ -47,6 +47,29 @@ cmake --build build
 Dependencies: `qt6-base`, `yaml-cpp`, `cmake`, `gcc` (or another
 C++17 compiler).
 
+## Tests
+
+Pure-logic unit tests (config parsing, include/exclude precedence,
+glob-based eligibility) run under gtest and don't require root or a
+real network:
+
+```sh
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCONWATCH_BUILD_TESTS=ON .
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+Additional dependency: `gtest`.
+
+Netlink event handling and process spawning are exercised manually
+(see Known limitations) — they need `CAP_NET_ADMIN`/root to create
+test interfaces (`ip link add ... type veth`) and aren't covered by
+the current CI job.
+
+GitHub Actions (`.github/workflows/ci.yml`) builds the full project
+and runs this suite on every push/PR, using Arch Linux to match the
+target platform.
+
 ## Install
 
 Raw ICMP sockets require `CAP_NET_RAW`. Rather than running as root,

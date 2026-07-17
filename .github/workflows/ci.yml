@@ -31,3 +31,12 @@ jobs:
 
       - name: Integration tests (netlink + process lifecycle)
         run: ./tests/integration_netlink_test.sh
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: conwatch-linux-x86_64
+          path: |
+            build/conwatch
+            build/conwatch-tray
+          retention-days: 90

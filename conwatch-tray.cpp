@@ -55,6 +55,7 @@ public:
     PingMonitor(QString iface, QString targetIp, QString label)
         : m_iface(std::move(iface)), m_targetIp(std::move(targetIp)), m_label(std::move(label)) {
         m_pid = static_cast<uint16_t>(getpid() & 0xffff);
+        m_ifaceTag = shortIfaceTag(m_iface);
 
         m_tray = new QSystemTrayIcon(this);
         auto *menu = new QMenu();
@@ -77,6 +78,27 @@ public:
 
 private:
     enum class Color { Green, Yellow, Red };
+
+    // Short (<=3 char) tag for an interface name, for display on a small
+    // icon: leading letters (up to 2) plus the trailing digit run, e.g.
+    // "wlan0" -> "wl0", "enp196s0f4u1u4" -> "en4".
+    static QString shortIfaceTag(const QString &iface) {
+        QString letters;
+        for (QChar c : iface) {
+            if (!c.isLetter()) break;
+            letters += c;
+        }
+        letters = letters.left(2);
+
+        QString trailingDigits;
+        int i = iface.size() - 1;
+        while (i >= 0 && iface[i].isDigit()) {
+            trailingDigits.prepend(iface[i]);
+            --i;
+        }
+
+        return letters + trailingDigits.right(1);
+    }
 
     void openSocket() {
         if (m_sock >= 0) close(m_sock);
@@ -165,6 +187,41 @@ private:
         m_tray->setToolTip(status);
     }
 
+    QPixmap renderIcon(int kSize, const QColor &qc) {
+        QPixmap pix(kSize, kSize);
+        pix.fill(Qt::transparent);
+        QPainter p(&pix);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setRenderHint(QPainter::TextAntialiasing);
+
+        p.setBrush(qc);
+        p.setPen(QColor(0, 0, 0, 60));
+        p.drawEllipse(kSize / 16, kSize / 16, kSize - kSize / 8, kSize - kSize / 8);
+
+        QFont ifaceFont = p.font();
+        ifaceFont.setBold(true);
+        ifaceFont.setPixelSize(kSize * 26 / 64);
+        p.setFont(ifaceFont);
+        p.setPen(Qt::black);
+        p.drawText(QRect(0, 0, kSize, kSize), Qt::AlignCenter, m_ifaceTag);
+
+        QFont protoFont = p.font();
+        protoFont.setBold(true);
+        protoFont.setPixelSize(kSize * 22 / 64);
+        p.setFont(protoFont);
+        p.setPen(Qt::white);
+        QFontMetrics protoMetrics(protoFont);
+        QRect protoInk = protoMetrics.tightBoundingRect("4");
+        // Shift so the glyph's actual ink (not its font-metrics box) is
+        // flush against the top-right pixel corner of the canvas.
+        int protoX = kSize - protoInk.width() - protoInk.left();
+        int protoY = -protoInk.top();
+        p.drawText(protoX, protoY, "4");
+        p.end();
+
+        return pix;
+    }
+
     void setColor(Color c) {
         if (c == m_currentColor) return;
         m_currentColor = c;
@@ -176,26 +233,20 @@ private:
             case Color::Red:    qc = QColor(0xe7, 0x4c, 0x3c); break;
         }
 
-        QPixmap pix(22, 22);
-        pix.fill(Qt::transparent);
-        QPainter p(&pix);
-        p.setRenderHint(QPainter::Antialiasing);
-        p.setRenderHint(QPainter::TextAntialiasing);
+        // Render at several standard tray/panel sizes so the desktop shell
+        // can pick the closest match instead of scaling one fixed bitmap.
+        QIcon icon;
+        for (int size : {16, 22, 24, 32, 48, 64, 128}) {
+            icon.addPixmap(renderIcon(size, qc));
+        }
 
-        QFont font = p.font();
-        font.setBold(true);
-        font.setPixelSize(16);
-        p.setFont(font);
-        p.setPen(qc);
-        p.drawText(pix.rect(), Qt::AlignCenter, "4");
-        p.end();
-
-        m_tray->setIcon(QIcon(pix));
+        m_tray->setIcon(icon);
     }
 
     QString m_iface;
     QString m_targetIp;
     QString m_label;
+    QString m_ifaceTag;
     QSystemTrayIcon *m_tray = nullptr;
     QAction *m_statusAction = nullptr;
     int m_sock = -1;

@@ -19,6 +19,13 @@ constexpr const char *kDefaultConfigYaml = R"YAML(# conwatch configuration
 # "target" under interfaces: below.
 default_target: "1.1.1.1"
 
+# Optional default IPv6 ping target, used alongside default_target so
+# interfaces without their own target/target6 override get both an
+# IPv4 and IPv6 check. Leave unset to run IPv4-only by default (a
+# hostname default_target that resolves to both A/AAAA records also
+# enables both protocols, without needing this key).
+# default_target6: "2606:4700:4700::1111"
+
 # Exactly one of include / exclude should be populated; leave the
 # other empty ([]). Populating both with real patterns is a startup
 # error (see README) rather than a silently-guessed precedence.
@@ -45,6 +52,7 @@ exclude:
 #   wg0:
 #     label: "VPN"
 #     target: "10.10.0.1"
+#     target6: "fd00::1"
 interfaces: {}
 )YAML";
 
@@ -89,6 +97,9 @@ Config loadConfig(const std::string &path) {
     if (root["default_target"]) {
         cfg.defaultTarget = root["default_target"].as<std::string>();
     }
+    if (root["default_target6"]) {
+        cfg.defaultTarget6 = root["default_target6"].as<std::string>();
+    }
     if (root["include"]) {
         for (auto n : root["include"]) cfg.include.push_back(n.as<std::string>());
     }
@@ -102,6 +113,7 @@ Config loadConfig(const std::string &path) {
             YAML::Node node = it.second;
             ov.label = node["label"] ? node["label"].as<std::string>() : ifaceName;
             if (node["target"]) ov.target = node["target"].as<std::string>();
+            if (node["target6"]) ov.target6 = node["target6"].as<std::string>();
             cfg.interfaces[ifaceName] = ov;
         }
     }
@@ -146,4 +158,10 @@ std::string resolveLabel(const Config &cfg, const std::string &iface) {
     auto it = cfg.interfaces.find(iface);
     if (it != cfg.interfaces.end() && !it->second.label.empty()) return it->second.label;
     return iface;
+}
+
+std::string resolveTarget6(const Config &cfg, const std::string &iface) {
+    auto it = cfg.interfaces.find(iface);
+    if (it != cfg.interfaces.end() && it->second.target6) return *it->second.target6;
+    return cfg.defaultTarget6.value_or("");
 }

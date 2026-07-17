@@ -4,8 +4,8 @@
 // state directly, so it works regardless of which (if any) network
 // manager is running.
 //
-// Spawns/kills `conwatch-tray <iface> <target> <label>` child
-// processes as interfaces matching the config's include/exclude
+// Spawns/kills `conwatch-tray <iface> <target> <target6> <label>`
+// child processes as interfaces matching the config's include/exclude
 // rules go operationally up/down. See ../README.md for the config
 // schema.
 
@@ -73,7 +73,8 @@ int main() {
 
         if (isUp) {
             if (!isEligible(cfg, name)) return;
-            processes.start(name, resolveTarget(cfg, name), resolveLabel(cfg, name));
+            processes.start(name, resolveTarget(cfg, name), resolveTarget6(cfg, name),
+                             resolveLabel(cfg, name));
         } else {
             processes.stop(name);
         }

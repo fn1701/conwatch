@@ -6,7 +6,7 @@
 #include <unistd.h>
 
 void ProcessManager::start(const std::string &iface, const std::string &target,
-                             const std::string &label) {
+                             const std::string &target6, const std::string &label) {
     if (isRunning(iface)) return;
 
     pid_t pid = fork();
@@ -25,7 +25,7 @@ void ProcessManager::start(const std::string &iface, const std::string &target,
         sigprocmask(SIG_SETMASK, &empty, nullptr);
 
         execlp("/usr/local/bin/conwatch-tray", "conwatch-tray", iface.c_str(), target.c_str(),
-               label.c_str(), static_cast<char *>(nullptr));
+               target6.c_str(), label.c_str(), static_cast<char *>(nullptr));
         _exit(127); // exec failed
     }
 

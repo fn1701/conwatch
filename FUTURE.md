@@ -44,37 +44,18 @@ it was launched for.
 
 ### Identifying which interface a tray icon represents
 
-With multiple per-interface icons on screen at once, and IPv6 support
-(below) adding a per-protocol dimension per icon, there needs to be a
-way to tell icons apart at a glance beyond hover tooltip. Options to
-explore, not yet decided: label text baked into the tooltip (already
-possible today via argv `label`), vs. something visible on the icon
-itself (e.g. interface name initial). Lower priority than the
-protocol glyph below, which has a concrete starting design.
+Implemented: each icon renders a short (<=3 char) interface tag (e.g.
+"wl0", "en4") centered on the circle, computed by `shortIfaceTag()` in
+`conwatch-tray.cpp`.
 
 ### Protocol status glyph (4 / 4/6 / 6)
 
-Once IPv6 checks exist, the tray icon should show which protocol(s)
-are currently working on that interface, not just a red/yellow/green
-loss-severity color. `setColor()` in `conwatch-tray.cpp` (currently
-`drawEllipse`-only, no text) is the natural place to extend, since it
-already draws into a `QPixmap` via `QPainter` — this needs
-`QPainter::drawText` added there.
-
-Decided already: start with **protocol-only glyph** — replace the
-plain colored circle with a drawn "4", "6", or "4/6" label reflecting
-which of IPv4/IPv6 currently have working ping on that interface, and
-build/deploy that first before layering color back on top. Color
-(loss severity) as an overlay on top of the glyph is a likely next
-step once the glyph itself works, but is explicitly deferred until
-after the glyph-only version is validated.
-
-This requires the `Color` enum (currently loss-severity-only:
-`Green`/`Yellow`/`Red`) to gain a protocol dimension — either two
-independent per-protocol states composed at draw time, or a combined
-state enum covering all v4/v6-up/down permutations. Depends on the
-IPv6 check existing first (above), since there's no v6 status to
-render until then.
+Implemented: the icon's top-right glyph shows which of IPv4/IPv6 are
+*currently* succeeding (not just configured) — "4", "6", "4/6", or
+blank if all active protocols are failing. The circle color is the
+worst-of loss severity across protocols that have both a resolved
+target and a local address on the interface. See `renderTray()` /
+`renderIcon()` in `conwatch-tray.cpp`.
 
 ## Additional diagnostic checks
 
@@ -88,17 +69,6 @@ timer):
 - **DNS check** — resolve a fixed hostname periodically/alongside the
   ping, to catch DNS-only outages (interface up, ICMP working, DNS
   broken) that the current ping-only check can't see.
-- **IPv6 check** — parallel ICMP6 ping, since a network can have
-  working IPv4 and broken/absent IPv6 (or vice versa) independently.
-  The current `PingMonitor` in `conwatch-tray.cpp` is IPv4-only
-  end-to-end (raw `AF_INET` socket, hand-rolled `iphdr`/`icmphdr`
-  checksum) — this isn't a copy-paste extension, since ICMPv6 raw
-  sockets get their checksum computed by the kernel via the pseudo-
-  header rather than manually. Needs a second target/label per
-  interface in config (`resolveTarget`/`resolveLabel` in
-  `watcher/config.cpp` currently resolve one target per interface),
-  and a parallel v6 socket+send+recv path alongside the v4 one so
-  both protocols are checked independently on the same interface.
 - **MTU check** — detect path MTU issues (e.g. via a DF-flagged ping
   at a known size) that manifest as large-packet failures despite
   small pings succeeding — a known VPN/tunnel failure mode.

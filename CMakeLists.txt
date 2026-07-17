@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(yaml-cpp REQUIRED)
 
-add_executable(conwatch-tray conwatch-tray.cpp)
+add_executable(conwatch-tray conwatch-tray.cpp target_resolve.cpp)
 target_link_libraries(conwatch-tray PRIVATE Qt6::Widgets)
 
 add_executable(conwatch
@@ -28,7 +28,9 @@ if(CONWATCH_BUILD_TESTS)
 
     add_executable(conwatch_tests
         tests/config_test.cpp
+        tests/target_resolve_test.cpp
         watcher/config.cpp
+        target_resolve.cpp
     )
     target_link_libraries(conwatch_tests PRIVATE yaml-cpp::yaml-cpp GTest::gtest GTest::gtest_main)
 

@@ -3,20 +3,31 @@
 A minimal per-interface connection monitor for Linux desktops with a
 system tray. `conwatch-tray` pings a target once per second over a raw
 ICMP socket bound to a specific network interface and shows a
-color-coded system tray icon:
+color-coded system tray icon. The target may be a literal IPv4
+address, a literal IPv6 address, or a hostname — a hostname that
+resolves to both an A and AAAA record enables independent IPv4 and
+IPv6 checks on the same interface. A small glyph on the icon ("4",
+"6", or "4/6") shows which protocol(s) are currently succeeding; the
+circle color reflects the worst loss severity across whichever
+protocols have both a resolved target and a local address of that
+family on the interface:
 
-- **green** — last ping succeeded
-- **yellow** — 1-9 consecutive losses
-- **red** — 10+ consecutive losses
+- **green** — last ping succeeded (all active protocols)
+- **yellow** — 1-9 consecutive losses (any active protocol)
+- **red** — 10+ consecutive losses (any active protocol)
 
-After 10 consecutive losses the raw socket is closed and recreated
-(re-resolving the interface index and rebinding), to avoid a socket
-left stale by an interface renumbering event — WiFi roam, DHCP
-renewal, or a VPN tunnel being torn down and re-created with a new
-`ifindex`.
+A protocol with no local address on the interface (e.g. no IPv6
+address assigned) is skipped entirely — never pinged, and excluded
+from both the glyph and the color.
 
-Built with Qt6 (`QSystemTrayIcon`) and a raw `AF_INET`/`SOCK_RAW`
-socket bound via `SO_BINDTODEVICE`.
+After 10 consecutive losses on a protocol, that protocol's raw socket
+is closed and recreated (re-resolving the interface index and
+rebinding), to avoid a socket left stale by an interface renumbering
+event — WiFi roam, DHCP renewal, or a VPN tunnel being torn down and
+re-created with a new `ifindex`.
+
+Built with Qt6 (`QSystemTrayIcon`) and raw `AF_INET`/`AF_INET6`
+`SOCK_RAW` sockets bound via `SO_BINDTODEVICE`.
 
 `conwatch` (the watcher daemon) automatically discovers which
 interfaces to monitor by listening directly to kernel netlink
@@ -27,7 +38,8 @@ NetworkManager dependency. See below.
 ## Components
 
 - **`conwatch-tray`** — the ping/tray-icon binary. Takes an interface,
-  a target IP, and a label: `conwatch-tray wlan0 1.1.1.1 WiFi`.
+  a target, and a label: `conwatch-tray wlan0 1.1.1.1 WiFi`. The
+  target may be a literal IPv4/IPv6 address or a hostname to resolve.
 - **`conwatch`** — a headless daemon (no Qt) that watches for
   interfaces coming up/down via `NETLINK_ROUTE`, applies an
   include/exclude filter from a YAML config, and spawns/kills
@@ -128,6 +140,11 @@ defaults if it doesn't already exist:
 # "target" under interfaces: below.
 default_target: "1.1.1.1"
 
+# Optional default IPv6 ping target, used alongside default_target so
+# interfaces without their own target/target6 override get both an
+# IPv4 and IPv6 check. Leave unset to run IPv4-only by default.
+# default_target6: "2606:4700:4700::1111"
+
 # Exactly one of include / exclude should be populated; leave the
 # other empty ([]). Populating both with real (non-"*") patterns is a
 # startup error, by design -- a silently-guessed precedence would
@@ -155,11 +172,31 @@ exclude:
 #   wg0:
 #     label: "VPN"
 #     target: "10.10.0.1"
+#     target6: "fd00::1"
 interfaces: {}
 ```
 
 Config is read once at startup; edit and restart the service to apply
 changes (`systemctl --user restart conwatch.service`).
+
+`target` (both `default_target` and any per-interface override) accepts
+three forms:
+
+- A literal IPv4 address (e.g. `"1.1.1.1"`) — IPv4-only check.
+- A literal IPv6 address (e.g. `"2606:4700:4700::1111"`) — IPv6-only
+  check.
+- A hostname (e.g. `"cloudflare.com"`) — resolved via DNS at
+  `conwatch-tray` startup. Whichever of A/AAAA records resolve
+  determines which protocol(s) are checked; a hostname with both
+  enables independent IPv4 and IPv6 checks on that one interface. DNS
+  is resolved once at startup, not re-resolved live (same no-live-reload
+  model as the rest of this config).
+
+`target6` (and `default_target6`) is a separate, optional field for
+adding an IPv6 target *alongside* a `target`/`default_target` that's a
+literal IPv4 address -- it never overrides a v6 target already
+resolved from `target` itself (e.g. a literal-v6 or hostname-with-AAAA
+`target` takes precedence over `target6`).
 
 ## How interface detection works
 

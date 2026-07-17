@@ -114,6 +114,21 @@ TEST(Resolve, TargetAndLabelFallBackToDefaults) {
     EXPECT_EQ(resolveLabel(cfg, "wlan0"), "wlan0");
 }
 
+TEST(Resolve, Target6FallsBackToDefaultTarget6OrEmpty) {
+    Config cfg;
+    cfg.defaultTarget6 = "2606:4700:4700::1111";
+    InterfaceOverride ov;
+    ov.label = "VPN";
+    ov.target6 = "fd00::1";
+    cfg.interfaces["wg0"] = ov;
+
+    EXPECT_EQ(resolveTarget6(cfg, "wg0"), "fd00::1");
+    EXPECT_EQ(resolveTarget6(cfg, "wlan0"), "2606:4700:4700::1111");
+
+    Config noDefault;
+    EXPECT_EQ(resolveTarget6(noDefault, "wlan0"), "");
+}
+
 TEST(Config, BothIncludeAndExcludePopulatedIsAFatalError) {
     TempConfigFile f(R"YAML(
 include: ["wg*"]

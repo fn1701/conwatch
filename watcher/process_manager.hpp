@@ -9,9 +9,11 @@
 // watcher can stay Qt-free and lightweight while idle.
 class ProcessManager {
 public:
-    // Spawns `conwatch-tray <iface> <target> <label>` if not already running
-    // for `iface`. No-op if already tracked.
-    void start(const std::string &iface, const std::string &target, const std::string &label);
+    // Spawns `conwatch-tray <iface> <target> <target6> <label>` if not
+    // already running for `iface`. `target6` may be empty (not provided).
+    // No-op if already tracked.
+    void start(const std::string &iface, const std::string &target, const std::string &target6,
+               const std::string &label);
 
     // Sends SIGTERM to the tracked child for `iface` and stops
     // tracking it immediately (actual exit is reaped asynchronously

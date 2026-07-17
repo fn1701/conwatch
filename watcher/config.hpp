@@ -8,12 +8,14 @@
 struct InterfaceOverride {
     std::string label;
     std::optional<std::string> target;
+    std::optional<std::string> target6;
 };
 
 struct Config {
     std::vector<std::string> include;
     std::vector<std::string> exclude;
     std::string defaultTarget = "1.1.1.1";
+    std::optional<std::string> defaultTarget6;
     std::unordered_map<std::string, InterfaceOverride> interfaces;
 };
 
@@ -37,3 +39,9 @@ bool isEligible(const Config &cfg, const std::string &name);
 // applying any per-interface override.
 std::string resolveTarget(const Config &cfg, const std::string &iface);
 std::string resolveLabel(const Config &cfg, const std::string &iface);
+
+// Resolves the effective IPv6 default-target override for a given
+// interface, if any (per-interface target6, falling back to
+// default_target6). Empty string if neither is set -- conwatch-tray
+// treats an empty target6 argv as "not provided".
+std::string resolveTarget6(const Config &cfg, const std::string &iface);

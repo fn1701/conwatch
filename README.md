@@ -1,9 +1,9 @@
-# conwatch (formerly nettray)
+# conwatch
 
 A minimal per-interface connection monitor for Linux desktops with a
-system tray. Pings a target once per second over a raw ICMP socket
-bound to a specific network interface and shows a color-coded system
-tray icon:
+system tray. `conwatch-tray` pings a target once per second over a raw
+ICMP socket bound to a specific network interface and shows a
+color-coded system tray icon:
 
 - **green** — last ping succeeded
 - **yellow** — 1-9 consecutive losses
@@ -18,24 +18,24 @@ renewal, or a VPN tunnel being torn down and re-created with a new
 Built with Qt6 (`QSystemTrayIcon`) and a raw `AF_INET`/`SOCK_RAW`
 socket bound via `SO_BINDTODEVICE`.
 
-## Historical setup (superseded)
+`conwatch` (the watcher daemon) automatically discovers which
+interfaces to monitor by listening directly to kernel netlink
+link-state events, and spawns one `conwatch-tray` instance per
+eligible interface — no manual per-interface systemd units, no
+NetworkManager dependency. See below.
 
-> This section documents the original, hand-wired setup this project
-> started from. It has since been replaced by a netlink-driven
-> auto-discovery watcher (see later commits / the main README) that
-> removes the need for hardcoded interface names and NetworkManager
-> specifically. Kept here for reference.
+## Components
 
-Two independent instances ran, one per interface:
+- **`conwatch-tray`** — the ping/tray-icon binary. Takes an interface,
+  a target IP, and a label: `conwatch-tray wlan0 1.1.1.1 WiFi`.
+- **`conwatch`** — a headless daemon (no Qt) that watches for
+  interfaces coming up/down via `NETLINK_ROUTE`, applies an
+  include/exclude filter from a YAML config, and spawns/kills
+  `conwatch-tray` child processes accordingly.
 
-| Instance | Interface | Target | Started by |
-|---|---|---|---|
-| WiFi | `wlan0` | `1.1.1.1` | systemd user service, always on |
-| VPN | `wg0` (WireGuard, example name) | `1.1.1.1` | systemd templated user service, started/stopped by a NetworkManager dispatcher hook |
-
-This was a hardcoded, two-interface setup — adding another interface
-meant creating another unit and/or editing the dispatcher script by
-hand.
+These are currently one process spawning another (not yet split via
+D-Bus) — see the future-plans notes for the intended `conwatch` /
+`conwatch-tray` IPC split.
 
 ## Build
 
@@ -44,146 +44,114 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release .
 cmake --build build
 ```
 
-Dependencies: `qt6-base`, `cmake`, `gcc` (or another C++17 compiler).
+Dependencies: `qt6-base`, `yaml-cpp`, `cmake`, `gcc` (or another
+C++17 compiler).
 
 ## Install
 
 Raw ICMP sockets require `CAP_NET_RAW`. Rather than running as root,
-the capability is granted directly on the installed binary:
+the capability is granted directly on the installed `conwatch-tray`
+binary (the watcher itself needs no special capabilities — only
+netlink and `fork`/`exec`, both unprivileged):
 
 ```sh
-sudo install -m 755 build/nettray /usr/local/bin/nettray
-sudo setcap cap_net_raw+ep /usr/local/bin/nettray
-getcap /usr/local/bin/nettray   # sanity check: should print cap_net_raw=ep
+sudo install -m 755 build/conwatch-tray /usr/local/bin/conwatch-tray
+sudo setcap cap_net_raw+ep /usr/local/bin/conwatch-tray
+getcap /usr/local/bin/conwatch-tray   # sanity check: should print cap_net_raw=ep
+
+sudo install -m 755 build/conwatch /usr/local/bin/conwatch
 ```
 
-`/usr/local/bin` is used (not `~/.local/bin`) so the binary and its
+`/usr/local/bin` is used (not `~/.local/bin`) so both binaries and the
 capability are available system-wide, not just for one user.
 
-## systemd user services (historical)
-
-Two unit files (under `systemd/`, installed to
-`~/.config/systemd/user/`):
-
-**`nettray-wlan0.service`** — always-on WiFi monitor:
-
-```ini
-[Unit]
-Description=Nettray ping monitor - WiFi (wlan0)
-After=graphical-session.target network.target
-PartOf=graphical-session.target
-
-[Service]
-ExecStart=/usr/local/bin/nettray wlan0 1.1.1.1 WiFi
-Restart=on-failure
-RestartSec=3
-
-[Install]
-WantedBy=graphical-session.target
-```
-
-Enabled to start automatically with the graphical session:
+## Run as a systemd user service
 
 ```sh
+mkdir -p ~/.config/systemd/user
+cp systemd/conwatch.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now nettray-wlan0.service
+systemctl --user enable --now conwatch.service
 ```
 
-**`nettray-vpn@.service`** — a *template* unit (note the `@`), so it
-can be instantiated for any interface name via `%i`:
+The watcher runs as a single always-on service; it manages
+`conwatch-tray` child processes directly rather than through systemd.
 
-```ini
-[Unit]
-Description=Nettray ping monitor - VPN (%i)
-After=graphical-session.target
-PartOf=graphical-session.target
+## Configuration
 
-[Service]
-ExecStart=/usr/local/bin/nettray %i 1.1.1.1 VPN
-Restart=on-failure
-RestartSec=3
+On first run, `conwatch` creates `~/.config/conwatch/config.yaml` (or
+`$XDG_CONFIG_HOME/conwatch/config.yaml`) with full documented
+defaults if it doesn't already exist:
+
+```yaml
+# Default ping target for any monitored interface without its own
+# "target" under interfaces: below.
+default_target: "1.1.1.1"
+
+# Exactly one of include / exclude should be populated; leave the
+# other empty ([]). Populating both with real (non-"*") patterns is a
+# startup error, by design -- a silently-guessed precedence would
+# hide misconfiguration in a background daemon nobody's watching a
+# terminal for.
+
+# If non-empty, ONLY interfaces matching one of these glob patterns
+# are monitored (allow-list mode).
+include: []
+
+# Interfaces matching any of these glob patterns are never monitored.
+# Defaults cover loopback and common virtual/container interfaces.
+exclude:
+  - "lo"
+  - "docker*"
+  - "podman*"
+  - "virbr*"
+  - "veth*"
+  - "br-*"
+
+# Per-interface overrides, keyed by exact interface name. Optional.
+# interfaces:
+#   wlan0:
+#     label: "WiFi"
+#   wg0:
+#     label: "VPN"
+#     target: "10.10.0.1"
+interfaces: {}
 ```
 
-This one was not enabled directly — it was started/stopped on demand
-(see below), e.g. as `nettray-vpn@wg0.service`.
+Config is read once at startup; edit and restart the service to apply
+changes (`systemctl --user restart conwatch.service`).
 
-## VPN interface lifecycle: NetworkManager dispatcher hook (historical)
+## How interface detection works
 
-The WireGuard interface only exists while the VPN is connected, so its
-monitor needed to start/stop in step with the tunnel. This was handled
-by a NetworkManager dispatcher script (root-owned, since NM dispatcher
-scripts always run as root):
+`conwatch` opens a `NETLINK_ROUTE` socket subscribed to `RTMGRP_LINK`
+and parses `RTM_NEWLINK`/`RTM_DELLINK` messages. An interface is
+considered "operationally up" only when
+`IFF_UP && IFF_RUNNING && IFF_LOWER_UP` all hold — the `IFF_LOWER_UP`
+bit specifically distinguishes an admin-up-but-unplugged ethernet port
+(or a WiFi radio that's on but not associated) from an interface that's
+actually usable. On startup, an `RTM_GETLINK` dump request populates
+initial state for interfaces already up (e.g. WiFi at boot), so nothing
+is missed waiting for the next state change.
 
-**`/etc/NetworkManager/dispatcher.d/10-nettray-vpn.sh`** (checked into
-this repo as `10-nettray-vpn.sh`):
+This is independent of NetworkManager, systemd-networkd, or any other
+network management daemon — it works directly against the kernel.
 
-```sh
-#!/bin/bash
-IFACE="$1"
-ACTION="$2"
+## Known limitations
 
-TARGET_USER="your-username"
-USER_UID="$(id -u "$TARGET_USER")"
+- No live config reload — changes require restarting the watcher.
+- `include`/`exclude` patterns are matched with `fnmatch(3)` glob
+  syntax (e.g. `docker*`), not full regex.
+- Per-interface `conwatch-tray` children are spawned via
+  `fork()`+`execlp()` from a fixed path (`/usr/local/bin/conwatch-tray`);
+  a different install location currently requires editing
+  `process_manager.cpp`.
 
-[[ "$IFACE" == "wg0" ]] || exit 0
+## History
 
-run_as_user() {
-    sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="/run/user/$USER_UID" \
-        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$USER_UID/bus" \
-        systemctl --user "$@"
-}
-
-case "$ACTION" in
-    up)
-        run_as_user start "nettray-vpn@${IFACE}.service"
-        ;;
-    down|pre-down)
-        run_as_user stop "nettray-vpn@${IFACE}.service"
-        ;;
-esac
-```
-
-Installed with:
-
-```sh
-sudo install -m 755 10-nettray-vpn.sh /etc/NetworkManager/dispatcher.d/10-nettray-vpn.sh
-```
-
-NetworkManager auto-discovers and runs any executable script dropped
-into `dispatcher.d/` — no separate registration step needed.
-
-### Why this script looked the way it did (lessons learned)
-
-Two things did *not* work as initially expected, in case this pattern
-is reused elsewhere:
-
-1. **`CONNECTION_TYPE` is not reliably set.** NetworkManager's
-   dispatcher documentation describes a `CONNECTION_TYPE` environment
-   variable, and an earlier version of this script filtered on
-   `[[ "$CONNECTION_TYPE" == "wireguard" ]]`. In practice, on the
-   system this was developed on, `CONNECTION_TYPE` came through
-   **empty** for `up`/`down` actions (confirmed by temporarily logging
-   all dispatcher env vars via `logger`). The script matched on
-   `$IFACE` (the first positional argument, always populated) instead.
-
-2. **Detecting "is this a WireGuard interface" via sysfs doesn't work
-   everywhere either.** `/sys/class/net/<iface>/wireguard` is
-   documented as the way to detect a kernel WireGuard netdev, but it
-   did not exist for the tested interface despite `ip -d link show`
-   and `nmcli` both correctly reporting the type as `wireguard`. Not
-   fully explained — possibly a NetworkManager-managed WireGuard
-   connection doesn't expose the same sysfs layout as one created
-   directly via `wg-quick`/`ip link add type wireguard`. Matching on
-   the known interface name sidestepped the issue entirely.
-
-## Known limitations of this historical setup
-
-- Hardcoded to exactly two interfaces. Adding a third meant creating
-  another static or templated unit and, for anything that isn't
-  always-up, another dispatcher filter branch.
-- The VPN lifecycle handling was NetworkManager-specific. It would not
-  work unmodified on a system using systemd-networkd or no network
-  manager at all.
-
-These limitations are what motivated the netlink-driven watcher that
-replaces this setup — see later history for that design.
+This project started as a hand-wired two-interface setup (one always-on
+WiFi monitor, one VPN monitor started/stopped by a NetworkManager
+dispatcher script), under the earlier name `nettray`. See earlier
+commits in this repository's history for that design and the lessons
+learned while building it — kept for reference since some of the
+NetworkManager dispatcher quirks documented there may resurface in
+other projects.

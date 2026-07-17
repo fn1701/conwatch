@@ -1,0 +1,39 @@
+#pragma once
+
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+struct InterfaceOverride {
+    std::string label;
+    std::optional<std::string> target;
+};
+
+struct Config {
+    std::vector<std::string> include;
+    std::vector<std::string> exclude;
+    std::string defaultTarget = "1.1.1.1";
+    std::unordered_map<std::string, InterfaceOverride> interfaces;
+};
+
+// Resolves ~/.config/nettray/config.yaml (respecting $XDG_CONFIG_HOME).
+std::string resolveConfigPath();
+
+// Writes the documented default config to `path` if it does not
+// already exist (temp-file-then-rename to avoid partial writes).
+// Returns true if a new file was created, false if one already existed.
+bool ensureConfigExists(const std::string &path);
+
+// Loads and validates the config at `path`. Exits the process with a
+// clear error message if include/exclude are both populated with real
+// (non-"*") patterns, per the documented precedence rule.
+Config loadConfig(const std::string &path);
+
+// True if `name` should be monitored under `cfg`'s include/exclude rules.
+bool isEligible(const Config &cfg, const std::string &name);
+
+// Resolves the effective ping target and label for a given interface,
+// applying any per-interface override.
+std::string resolveTarget(const Config &cfg, const std::string &iface);
+std::string resolveLabel(const Config &cfg, const std::string &iface);

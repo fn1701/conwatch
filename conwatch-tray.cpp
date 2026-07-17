@@ -1,6 +1,6 @@
-// nettray: per-interface ping monitor with a color-coded system tray icon.
+// conwatch-tray: per-interface ping monitor with a color-coded system tray icon.
 //
-// Usage: nettray <interface> <target-ip> [label]
+// Usage: conwatch-tray <interface> <target-ip> [label]
 //
 // Sends one ICMP echo per second on a raw socket bound to <interface>,
 // via <target-ip>. Tray icon color reflects recent loss:
@@ -200,7 +200,7 @@ private:
     Color m_currentColor = Color::Yellow;
 };
 
-#include "nettray.moc"
+#include "conwatch-tray.moc"
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);

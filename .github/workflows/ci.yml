@@ -8,12 +8,14 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    container:
+      image: archlinux:latest
+      options: --cap-add=NET_ADMIN
     steps:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm git cmake make gcc pkgconf qt6-base yaml-cpp gtest
+          pacman -S --noconfirm git cmake make gcc pkgconf qt6-base yaml-cpp gtest iproute2 procps-ng
 
       - uses: actions/checkout@v4
 
@@ -23,6 +25,9 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      - name: Test
+      - name: Unit tests
         working-directory: build
         run: ctest --output-on-failure
+
+      - name: Integration tests (netlink + process lifecycle)
+        run: ./tests/integration_netlink_test.sh

@@ -13,7 +13,7 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm git cmake gcc pkgconf qt6-base yaml-cpp gtest
+          pacman -S --noconfirm git cmake make gcc pkgconf qt6-base yaml-cpp gtest
 
       - uses: actions/checkout@v4
 

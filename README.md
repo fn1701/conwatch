@@ -61,14 +61,31 @@ ctest --test-dir build --output-on-failure
 
 Additional dependency: `gtest`.
 
-Netlink event handling and process spawning are exercised manually
-(see Known limitations) — they need `CAP_NET_ADMIN`/root to create
-test interfaces (`ip link add ... type veth`) and aren't covered by
-the current CI job.
+Netlink event handling and process spawning (spawn on link up, kill
+on down/removal, respawn, clean shutdown with no orphaned children)
+are covered by a separate integration test that drives the real
+`conwatch` binary against a `veth` pair. It needs root/`CAP_NET_ADMIN`
+to create the test interfaces, so it's not part of the gtest/ctest
+target above:
+
+```sh
+sudo ./tests/integration_netlink_test.sh
+```
+
+It substitutes a trivial stub for `conwatch-tray` (installed
+temporarily at `/usr/local/bin/conwatch-tray`, any existing binary
+there is restored afterward), since the real Qt tray binary needs a
+display and a D-Bus tray host that a CI container doesn't have — so
+this only exercises `conwatch`'s spawn/kill logic, not
+`conwatch-tray`'s ping/tray behavior itself (still manually verified,
+see Known limitations).
 
 GitHub Actions (`.github/workflows/ci.yml`) builds the full project
-and runs this suite on every push/PR, using Arch Linux to match the
-target platform.
+and runs both the gtest suite and this integration test on every
+push/PR, using Arch Linux (in a `CAP_NET_ADMIN`-enabled container) to
+match the target platform. Successful runs also upload the built
+`conwatch`/`conwatch-tray` binaries as a downloadable workflow
+artifact (90-day retention).
 
 ## Install
 
@@ -168,6 +185,10 @@ network management daemon — it works directly against the kernel.
   `fork()`+`execlp()` from a fixed path (`/usr/local/bin/conwatch-tray`);
   a different install location currently requires editing
   `process_manager.cpp`.
+- `conwatch-tray`'s own behavior (ICMP ping logic, socket recreation,
+  tray icon rendering) has no automated test coverage — it needs a
+  display and a D-Bus tray host, which a CI container doesn't provide.
+  Verified manually, including live VPN up/down toggling.
 
 ## History
 

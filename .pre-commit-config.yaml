@@ -37,15 +37,15 @@ repos:
         args: ["-i"]
         stages: [pre-commit]
 
-  # # C++ linting with clang-tidy
-  # - repo: https://github.com/pocc/pre-commit-hooks
-  #   rev: v1.3.5
-  #   hooks:
-  #     - id: clang-tidy
-  #       name: Lint C++ code with clang-tidy
-  #       types: [ c++ ]
-  #       args: [ "--format-style=file" ]
-  #       stages: [ pre-commit ]
+  # C++ linting with clang-tidy
+  - repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+      - id: clang-tidy
+        name: Lint C++ code with clang-tidy
+        types: [c++]
+        args: ["--format-style=file", "-p=build"]
+        stages: [pre-commit]
 
   # YAML and Markdown
   - repo: https://github.com/adrienverge/yamllint

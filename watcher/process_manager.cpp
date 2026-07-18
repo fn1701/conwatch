@@ -1,13 +1,14 @@
 #include "process_manager.hpp"
 
-#include <cstdio>
 #include <csignal>
+#include <cstdio>
 #include <sys/wait.h>
 #include <unistd.h>
 
-void ProcessManager::start(const std::string &iface, const std::string &target,
-                             const std::string &target6, const std::string &label) {
-    if (isRunning(iface)) return;
+void ProcessManager::start(const std::string &iface, const std::string &target, const std::string &target6, const std::string &label)
+{
+    if (isRunning(iface))
+        return;
 
     pid_t pid = fork();
     if (pid < 0) {
@@ -24,8 +25,7 @@ void ProcessManager::start(const std::string &iface, const std::string &target,
         sigemptyset(&empty);
         sigprocmask(SIG_SETMASK, &empty, nullptr);
 
-        execlp("/usr/local/bin/conwatch-tray", "conwatch-tray", iface.c_str(), target.c_str(),
-               target6.c_str(), label.c_str(), static_cast<char *>(nullptr));
+        execlp("/usr/local/bin/conwatch-tray", "conwatch-tray", iface.c_str(), target.c_str(), target6.c_str(), label.c_str(), static_cast<char *>(nullptr));
         _exit(127); // exec failed
     }
 
@@ -34,9 +34,11 @@ void ProcessManager::start(const std::string &iface, const std::string &target,
     m_byPid[pid] = iface;
 }
 
-void ProcessManager::stop(const std::string &iface) {
+void ProcessManager::stop(const std::string &iface)
+{
     auto it = m_byIface.find(iface);
-    if (it == m_byIface.end()) return;
+    if (it == m_byIface.end())
+        return;
 
     pid_t pid = it->second;
     kill(pid, SIGTERM);
@@ -46,7 +48,8 @@ void ProcessManager::stop(const std::string &iface) {
     m_byPid.erase(pid);
 }
 
-void ProcessManager::reapExited() {
+void ProcessManager::reapExited()
+{
     int status;
     pid_t pid;
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
@@ -58,7 +61,8 @@ void ProcessManager::reapExited() {
     }
 }
 
-void ProcessManager::stopAll() {
+void ProcessManager::stopAll()
+{
     for (const auto &[pid, iface] : m_byPid) {
         kill(pid, SIGTERM);
     }
@@ -80,6 +84,7 @@ void ProcessManager::stopAll() {
     }
 }
 
-bool ProcessManager::isRunning(const std::string &iface) const {
+bool ProcessManager::isRunning(const std::string &iface) const
+{
     return m_byIface.find(iface) != m_byIface.end();
 }

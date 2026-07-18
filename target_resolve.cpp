@@ -6,7 +6,8 @@
 #include <netdb.h>
 #include <sys/socket.h>
 
-ResolvedTargets resolveTargets(const std::string &target) {
+ResolvedTargets resolveTargets(const std::string &target)
+{
     ResolvedTargets result;
 
     struct in_addr v4addr;
@@ -21,15 +22,15 @@ ResolvedTargets resolveTargets(const std::string &target) {
         return result;
     }
 
-    struct addrinfo hints {};
+    struct addrinfo hints {
+    };
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_RAW;
 
     struct addrinfo *addrs = nullptr;
     int rc = getaddrinfo(target.c_str(), nullptr, &hints, &addrs);
     if (rc != 0) {
-        fprintf(stderr, "resolveTargets: getaddrinfo(%s) failed: %s\n", target.c_str(),
-                gai_strerror(rc));
+        fprintf(stderr, "resolveTargets: getaddrinfo(%s) failed: %s\n", target.c_str(), gai_strerror(rc));
         return result;
     }
 
@@ -46,7 +47,8 @@ ResolvedTargets resolveTargets(const std::string &target) {
                 result.v6 = std::string(buf);
             }
         }
-        if (result.v4 && result.v6) break;
+        if (result.v4 && result.v6)
+            break;
     }
 
     freeaddrinfo(addrs);

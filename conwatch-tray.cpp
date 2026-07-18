@@ -28,43 +28,47 @@
 // with a new ifindex, as happens when a VPN tunnel is torn down and
 // re-created).
 
-#include <QApplication>
-#include <QSystemTrayIcon>
-#include <QMenu>
 #include <QAction>
-#include <QTimer>
+#include <QApplication>
+#include <QIcon>
+#include <QMenu>
 #include <QPainter>
 #include <QPixmap>
-#include <QIcon>
+#include <QSystemTrayIcon>
+#include <QTimer>
 
 #include <arpa/inet.h>
+#include <cstdio>
+#include <cstring>
 #include <ifaddrs.h>
+#include <map>
 #include <net/if.h>
 #include <netinet/icmp6.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <sys/socket.h>
-#include <unistd.h>
-#include <cstring>
-#include <cstdio>
-#include <map>
 #include <tuple>
+#include <unistd.h>
 #include <utility>
 
 #include "target_resolve.hpp"
 
-namespace {
+namespace
+{
 
 constexpr int kFailStreakForRed = 10;
 constexpr int kFailStreakForSocketRecreate = 10;
 constexpr int kLocalAddressRecheckTicks = 10; // ~10s at the 1s tick interval
 
-uint16_t checksum(void *buf, int len) {
+uint16_t checksum(void *buf, int len)
+{
     uint16_t *p = static_cast<uint16_t *>(buf);
     uint32_t sum = 0;
-    for (; len > 1; len -= 2) sum += *p++;
-    if (len == 1) sum += *reinterpret_cast<uint8_t *>(p);
+    for (; len > 1; len -= 2)
+        sum += *p++;
+    if (len == 1)
+        sum += *reinterpret_cast<uint8_t *>(p);
     sum = (sum >> 16) + (sum & 0xffff);
     sum += (sum >> 16);
     return static_cast<uint16_t>(~sum);
@@ -73,18 +77,23 @@ uint16_t checksum(void *buf, int len) {
 // True if `iface` currently has at least one non-link-local address of
 // `family` (AF_INET or AF_INET6) assigned. Link-local IPv6 (fe80::/10) is
 // excluded since it can't reach an external ping target.
-bool ifaceHasAddress(const std::string &iface, int family) {
+bool ifaceHasAddress(const std::string &iface, int family)
+{
     struct ifaddrs *addrs = nullptr;
-    if (getifaddrs(&addrs) != 0) return false;
+    if (getifaddrs(&addrs) != 0)
+        return false;
 
     bool found = false;
     for (struct ifaddrs *a = addrs; a != nullptr; a = a->ifa_next) {
-        if (!a->ifa_addr || a->ifa_addr->sa_family != family) continue;
-        if (iface != a->ifa_name) continue;
+        if (!a->ifa_addr || a->ifa_addr->sa_family != family)
+            continue;
+        if (iface != a->ifa_name)
+            continue;
 
         if (family == AF_INET6) {
             auto *sin6 = reinterpret_cast<struct sockaddr_in6 *>(a->ifa_addr);
-            if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr)) continue;
+            if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr))
+                continue;
         }
         found = true;
         break;
@@ -95,11 +104,14 @@ bool ifaceHasAddress(const std::string &iface, int family) {
 
 } // namespace
 
-class PingMonitor : public QObject {
+class PingMonitor : public QObject
+{
     Q_OBJECT
 public:
     PingMonitor(QString iface, QString target, QString target6, QString label)
-        : m_iface(std::move(iface)), m_label(std::move(label)) {
+        : m_iface(std::move(iface))
+        , m_label(std::move(label))
+    {
         m_pid = static_cast<uint16_t>(getpid() & 0xffff);
         m_ifaceTag = shortIfaceTag(m_iface);
 
@@ -136,8 +148,10 @@ public:
         renderTray();
         m_tray->show();
 
-        if (m_v4.configured) openSocket4();
-        if (m_v6.configured) openSocket6();
+        if (m_v4.configured)
+            openSocket4();
+        if (m_v6.configured)
+            openSocket6();
 
         auto *timer = new QTimer(this);
         connect(timer, &QTimer::timeout, this, &PingMonitor::tick);
@@ -145,8 +159,16 @@ public:
     }
 
 private:
-    enum class Severity { Green, Yellow, Red };
-    enum class ProtoState { NoLocalAddress, Failing, Healthy };
+    enum class Severity {
+        Green,
+        Yellow,
+        Red
+    };
+    enum class ProtoState {
+        NoLocalAddress,
+        Failing,
+        Healthy
+    };
 
     struct ProtoTrack {
         bool configured = false;
@@ -160,10 +182,12 @@ private:
     // Short (<=3 char) tag for an interface name, for display on a small
     // icon: leading letters (up to 2) plus the trailing digit run, e.g.
     // "wlan0" -> "wl0", "enp196s0f4u1u4" -> "en4".
-    static QString shortIfaceTag(const QString &iface) {
+    static QString shortIfaceTag(const QString &iface)
+    {
         QString letters;
         for (QChar c : iface) {
-            if (!c.isLetter()) break;
+            if (!c.isLetter())
+                break;
             letters += c;
         }
         letters = letters.left(2);
@@ -178,40 +202,49 @@ private:
         return letters + trailingDigits.right(1);
     }
 
-    void openSocket4() {
-        if (m_v4.sock >= 0) close(m_v4.sock);
+    void openSocket4()
+    {
+        if (m_v4.sock >= 0)
+            close(m_v4.sock);
         m_v4.sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
         if (m_v4.sock < 0) {
             perror("socket(AF_INET)");
             return;
         }
-        if (setsockopt(m_v4.sock, SOL_SOCKET, SO_BINDTODEVICE, m_iface.toUtf8().constData(),
-                        m_iface.toUtf8().size()) < 0) {
+        if (setsockopt(m_v4.sock, SOL_SOCKET, SO_BINDTODEVICE, m_iface.toUtf8().constData(), m_iface.toUtf8().size()) < 0) {
             perror("SO_BINDTODEVICE (v4)");
         }
-        struct timeval tv { 0, 800 * 1000 }; // 800ms recv timeout
+        struct timeval tv {
+            0, 800 * 1000
+        }; // 800ms recv timeout
         setsockopt(m_v4.sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     }
 
-    void openSocket6() {
-        if (m_v6.sock >= 0) close(m_v6.sock);
+    void openSocket6()
+    {
+        if (m_v6.sock >= 0)
+            close(m_v6.sock);
         m_v6.sock = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
         if (m_v6.sock < 0) {
             perror("socket(AF_INET6)");
             return;
         }
-        if (setsockopt(m_v6.sock, SOL_SOCKET, SO_BINDTODEVICE, m_iface.toUtf8().constData(),
-                        m_iface.toUtf8().size()) < 0) {
+        if (setsockopt(m_v6.sock, SOL_SOCKET, SO_BINDTODEVICE, m_iface.toUtf8().constData(), m_iface.toUtf8().size()) < 0) {
             perror("SO_BINDTODEVICE (v6)");
         }
-        struct timeval tv { 0, 800 * 1000 };
+        struct timeval tv {
+            0, 800 * 1000
+        };
         setsockopt(m_v6.sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     }
 
-    bool sendPing4() {
-        if (m_v4.sock < 0) return false;
+    bool sendPing4()
+    {
+        if (m_v4.sock < 0)
+            return false;
 
-        struct sockaddr_in dst {};
+        struct sockaddr_in dst {
+        };
         dst.sin_family = AF_INET;
         if (inet_pton(AF_INET, m_v4.targetIp.toUtf8().constData(), &dst.sin_addr) != 1) {
             return false;
@@ -220,7 +253,7 @@ private:
         struct {
             struct icmphdr hdr;
             char payload[16];
-        } packet {};
+        } packet{};
         packet.hdr.type = ICMP_ECHO;
         packet.hdr.code = 0;
         packet.hdr.un.echo.id = m_pid;
@@ -229,27 +262,30 @@ private:
         packet.hdr.checksum = 0;
         packet.hdr.checksum = checksum(&packet, sizeof(packet));
 
-        ssize_t n = sendto(m_v4.sock, &packet, sizeof(packet), 0,
-                            reinterpret_cast<struct sockaddr *>(&dst), sizeof(dst));
+        ssize_t n = sendto(m_v4.sock, &packet, sizeof(packet), 0, reinterpret_cast<struct sockaddr *>(&dst), sizeof(dst));
         return n == sizeof(packet);
     }
 
-    bool recvReply4() {
-        if (m_v4.sock < 0) return false;
+    bool recvReply4()
+    {
+        if (m_v4.sock < 0)
+            return false;
 
         char buf[512];
-        struct sockaddr_in from {};
+        struct sockaddr_in from {
+        };
         socklen_t fromLen = sizeof(from);
 
         // Drain any replies waiting; accept if any matches our pid.
         while (true) {
-            ssize_t n = recvfrom(m_v4.sock, buf, sizeof(buf), 0,
-                                  reinterpret_cast<struct sockaddr *>(&from), &fromLen);
-            if (n <= 0) return false;
+            ssize_t n = recvfrom(m_v4.sock, buf, sizeof(buf), 0, reinterpret_cast<struct sockaddr *>(&from), &fromLen);
+            if (n <= 0)
+                return false;
 
             auto *ip = reinterpret_cast<struct iphdr *>(buf);
             int ipHeaderLen = ip->ihl * 4;
-            if (n < ipHeaderLen + static_cast<ssize_t>(sizeof(struct icmphdr))) continue;
+            if (n < ipHeaderLen + static_cast<ssize_t>(sizeof(struct icmphdr)))
+                continue;
 
             auto *icmp = reinterpret_cast<struct icmphdr *>(buf + ipHeaderLen);
             if (icmp->type == ICMP_ECHOREPLY && icmp->un.echo.id == m_pid) {
@@ -258,10 +294,13 @@ private:
         }
     }
 
-    bool sendPing6() {
-        if (m_v6.sock < 0) return false;
+    bool sendPing6()
+    {
+        if (m_v6.sock < 0)
+            return false;
 
-        struct sockaddr_in6 dst {};
+        struct sockaddr_in6 dst {
+        };
         dst.sin6_family = AF_INET6;
         if (inet_pton(AF_INET6, m_v6.targetIp.toUtf8().constData(), &dst.sin6_addr) != 1) {
             return false;
@@ -270,7 +309,7 @@ private:
         struct {
             struct icmp6_hdr hdr;
             char payload[16];
-        } packet {};
+        } packet{};
         packet.hdr.icmp6_type = ICMP6_ECHO_REQUEST;
         packet.hdr.icmp6_code = 0;
         packet.hdr.icmp6_id = m_pid;
@@ -279,25 +318,28 @@ private:
         // Leave icmp6_cksum as 0 -- the kernel computes/fills the ICMPv6
         // checksum in-kernel via the pseudo-header for raw AF_INET6 sockets.
 
-        ssize_t n = sendto(m_v6.sock, &packet, sizeof(packet), 0,
-                            reinterpret_cast<struct sockaddr *>(&dst), sizeof(dst));
+        ssize_t n = sendto(m_v6.sock, &packet, sizeof(packet), 0, reinterpret_cast<struct sockaddr *>(&dst), sizeof(dst));
         return n == sizeof(packet);
     }
 
-    bool recvReply6() {
-        if (m_v6.sock < 0) return false;
+    bool recvReply6()
+    {
+        if (m_v6.sock < 0)
+            return false;
 
         char buf[512];
-        struct sockaddr_in6 from {};
+        struct sockaddr_in6 from {
+        };
         socklen_t fromLen = sizeof(from);
 
         // Unlike IPv4 raw sockets, an ICMPv6 raw socket's payload does not
         // include the IPv6 header -- it starts directly at icmp6_hdr.
         while (true) {
-            ssize_t n = recvfrom(m_v6.sock, buf, sizeof(buf), 0,
-                                  reinterpret_cast<struct sockaddr *>(&from), &fromLen);
-            if (n <= 0) return false;
-            if (n < static_cast<ssize_t>(sizeof(struct icmp6_hdr))) continue;
+            ssize_t n = recvfrom(m_v6.sock, buf, sizeof(buf), 0, reinterpret_cast<struct sockaddr *>(&from), &fromLen);
+            if (n <= 0)
+                return false;
+            if (n < static_cast<ssize_t>(sizeof(struct icmp6_hdr)))
+                continue;
 
             auto *icmp6 = reinterpret_cast<struct icmp6_hdr *>(buf);
             if (icmp6->icmp6_type == ICMP6_ECHO_REPLY && icmp6->icmp6_id == m_pid) {
@@ -311,8 +353,10 @@ private:
     // has no address -- once addressed, no further rechecking is needed
     // until the process restarts (which happens naturally on interface
     // down/up via process_manager.cpp).
-    void maybeRecheckLocalAddress(ProtoTrack &t, int family) {
-        if (!t.configured || t.hasLocalAddress) return;
+    void maybeRecheckLocalAddress(ProtoTrack &t, int family)
+    {
+        if (!t.configured || t.hasLocalAddress)
+            return;
         if (t.recheckTicksLeft > 0) {
             t.recheckTicksLeft--;
             return;
@@ -321,61 +365,73 @@ private:
         t.recheckTicksLeft = kLocalAddressRecheckTicks;
     }
 
-    void tickV4() {
+    void tickV4()
+    {
         maybeRecheckLocalAddress(m_v4, AF_INET);
-        if (!m_v4.configured || !m_v4.hasLocalAddress) return;
+        if (!m_v4.configured || !m_v4.hasLocalAddress)
+            return;
 
         bool ok = sendPing4() && recvReply4();
         if (ok) {
             m_v4.failStreak = 0;
         } else {
             m_v4.failStreak++;
-            if (m_v4.failStreak % kFailStreakForSocketRecreate == 0) openSocket4();
+            if (m_v4.failStreak % kFailStreakForSocketRecreate == 0)
+                openSocket4();
         }
     }
 
-    void tickV6() {
+    void tickV6()
+    {
         maybeRecheckLocalAddress(m_v6, AF_INET6);
-        if (!m_v6.configured || !m_v6.hasLocalAddress) return;
+        if (!m_v6.configured || !m_v6.hasLocalAddress)
+            return;
 
         bool ok = sendPing6() && recvReply6();
         if (ok) {
             m_v6.failStreak = 0;
         } else {
             m_v6.failStreak++;
-            if (m_v6.failStreak % kFailStreakForSocketRecreate == 0) openSocket6();
+            if (m_v6.failStreak % kFailStreakForSocketRecreate == 0)
+                openSocket6();
         }
     }
 
-    static ProtoState stateOf(const ProtoTrack &t) {
-        if (!t.configured || !t.hasLocalAddress) return ProtoState::NoLocalAddress;
+    static ProtoState stateOf(const ProtoTrack &t)
+    {
+        if (!t.configured || !t.hasLocalAddress)
+            return ProtoState::NoLocalAddress;
         return t.failStreak == 0 ? ProtoState::Healthy : ProtoState::Failing;
     }
 
-    static Severity severityOf(const ProtoTrack &t) {
+    static Severity severityOf(const ProtoTrack &t)
+    {
         return t.failStreak >= kFailStreakForRed ? Severity::Red : Severity::Yellow;
     }
 
-    void tick() {
+    void tick()
+    {
         tickV4();
         tickV6();
 
-        auto state = std::make_tuple(m_v4.failStreak, m_v4.hasLocalAddress,
-                                      m_v6.failStreak, m_v6.hasLocalAddress);
+        auto state = std::make_tuple(m_v4.failStreak, m_v4.hasLocalAddress, m_v6.failStreak, m_v6.hasLocalAddress);
         if (state != m_lastTickState) {
             m_lastTickState = state;
             renderTray();
         }
     }
 
-    void renderTray() {
+    void renderTray()
+    {
         ProtoState v4State = stateOf(m_v4);
         ProtoState v6State = stateOf(m_v6);
 
         QString glyph;
-        if (v4State == ProtoState::Healthy) glyph += "4";
+        if (v4State == ProtoState::Healthy)
+            glyph += "4";
         if (v6State == ProtoState::Healthy) {
-            if (!glyph.isEmpty()) glyph += "/";
+            if (!glyph.isEmpty())
+                glyph += "/";
             glyph += "6";
         }
 
@@ -398,17 +454,12 @@ private:
 
         QStringList parts;
         if (v4State != ProtoState::NoLocalAddress) {
-            parts << (v4State == ProtoState::Healthy
-                          ? "v4 connected"
-                          : QString("v4: %1 consecutive losses").arg(m_v4.failStreak));
+            parts << (v4State == ProtoState::Healthy ? "v4 connected" : QString("v4: %1 consecutive losses").arg(m_v4.failStreak));
         }
         if (v6State != ProtoState::NoLocalAddress) {
-            parts << (v6State == ProtoState::Healthy
-                          ? "v6 connected"
-                          : QString("v6: %1 consecutive losses").arg(m_v6.failStreak));
+            parts << (v6State == ProtoState::Healthy ? "v6 connected" : QString("v6: %1 consecutive losses").arg(m_v6.failStreak));
         }
-        QString status = parts.isEmpty() ? QString("%1: no target resolved").arg(m_label)
-                                          : QString("%1: %2").arg(m_label, parts.join(", "));
+        QString status = parts.isEmpty() ? QString("%1: no target resolved").arg(m_label) : QString("%1: %2").arg(m_label, parts.join(", "));
         m_statusAction->setText(status);
         // Only touch the tooltip when its text actually changes -- calling
         // setToolTip() every tick (even with identical text) makes some
@@ -420,7 +471,8 @@ private:
         }
     }
 
-    QPixmap renderIcon(int kSize, const QColor &qc, const QString &glyph) {
+    QPixmap renderIcon(int kSize, const QColor &qc, const QString &glyph)
+    {
         QPixmap pix(kSize, kSize);
         pix.fill(Qt::transparent);
         QPainter p(&pix);
@@ -463,16 +515,24 @@ private:
     // once per distinct combo ever seen, not once per tick/transition --
     // a flapping connection re-uses cached QIcons instead of repainting
     // 7 pixmap sizes on every bounce.
-    QIcon &iconFor(Severity worst, const QString &glyph) {
+    QIcon &iconFor(Severity worst, const QString &glyph)
+    {
         auto key = std::make_pair(static_cast<int>(worst), glyph);
         auto it = m_iconCache.find(key);
-        if (it != m_iconCache.end()) return it->second;
+        if (it != m_iconCache.end())
+            return it->second;
 
         QColor qc;
         switch (worst) {
-            case Severity::Green:  qc = QColor(0x2e, 0xcc, 0x71); break;
-            case Severity::Yellow: qc = QColor(0xf1, 0xc4, 0x0f); break;
-            case Severity::Red:    qc = QColor(0xe7, 0x4c, 0x3c); break;
+        case Severity::Green:
+            qc = QColor(0x2e, 0xcc, 0x71);
+            break;
+        case Severity::Yellow:
+            qc = QColor(0xf1, 0xc4, 0x0f);
+            break;
+        case Severity::Red:
+            qc = QColor(0xe7, 0x4c, 0x3c);
+            break;
         }
 
         // Render at several standard tray/panel sizes so the desktop shell
@@ -485,8 +545,10 @@ private:
         return m_iconCache.emplace(key, std::move(icon)).first->second;
     }
 
-    void setIcon(Severity worst, const QString &glyph) {
-        if (worst == m_currentSeverity && glyph == m_currentGlyph) return;
+    void setIcon(Severity worst, const QString &glyph)
+    {
+        if (worst == m_currentSeverity && glyph == m_currentGlyph)
+            return;
         m_currentSeverity = worst;
         m_currentGlyph = glyph;
         m_tray->setIcon(iconFor(worst, glyph));
@@ -516,7 +578,8 @@ private:
 
 #include "conwatch-tray.moc"
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
     QApplication app(argc, argv);
     QApplication::setQuitOnLastWindowClosed(false);
 

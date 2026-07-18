@@ -7,23 +7,32 @@
 
 namespace fs = std::filesystem;
 
-namespace {
+namespace
+{
 
 // Writes `contents` to a fresh temp file and returns its path; the
 // file is removed when the returned guard goes out of scope.
-class TempConfigFile {
+class TempConfigFile
+{
 public:
-    explicit TempConfigFile(const std::string &contents) {
-        m_path = (fs::temp_directory_path() /
-                   ("conwatch-test-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
-                    "-" + std::to_string(reinterpret_cast<uintptr_t>(this)) + ".yaml"))
-                      .string();
+    explicit TempConfigFile(const std::string &contents)
+    {
+        m_path = (fs::temp_directory_path()
+                  / ("conwatch-test-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + "-"
+                     + std::to_string(reinterpret_cast<uintptr_t>(this)) + ".yaml"))
+                     .string();
         std::ofstream out(m_path, std::ios::trunc);
         out << contents;
     }
-    ~TempConfigFile() { fs::remove(m_path); }
+    ~TempConfigFile()
+    {
+        fs::remove(m_path);
+    }
 
-    const std::string &path() const { return m_path; }
+    const std::string &path() const
+    {
+        return m_path;
+    }
 
 private:
     std::string m_path;
@@ -31,7 +40,8 @@ private:
 
 } // namespace
 
-TEST(Config, LoadsDefaultsForMissingKeys) {
+TEST(Config, LoadsDefaultsForMissingKeys)
+{
     TempConfigFile f("{}\n");
     Config cfg = loadConfig(f.path());
     EXPECT_EQ(cfg.defaultTarget, "1.1.1.1");
@@ -40,7 +50,8 @@ TEST(Config, LoadsDefaultsForMissingKeys) {
     EXPECT_TRUE(cfg.interfaces.empty());
 }
 
-TEST(Config, ParsesIncludeExcludeAndOverrides) {
+TEST(Config, ParsesIncludeExcludeAndOverrides)
+{
     TempConfigFile f(R"YAML(
 default_target: "9.9.9.9"
 include: []
@@ -61,13 +72,15 @@ interfaces:
     EXPECT_EQ(*cfg.interfaces.at("wg0").target, "10.0.0.1");
 }
 
-TEST(Eligibility, EmptyIncludeExcludeAllowsEverythingExceptNothing) {
+TEST(Eligibility, EmptyIncludeExcludeAllowsEverythingExceptNothing)
+{
     Config cfg;
     EXPECT_TRUE(isEligible(cfg, "wlan0"));
     EXPECT_TRUE(isEligible(cfg, "lo"));
 }
 
-TEST(Eligibility, ExcludeGlobBlocksMatches) {
+TEST(Eligibility, ExcludeGlobBlocksMatches)
+{
     Config cfg;
     cfg.exclude = {"lo", "docker*", "veth*"};
     EXPECT_FALSE(isEligible(cfg, "lo"));
@@ -76,7 +89,8 @@ TEST(Eligibility, ExcludeGlobBlocksMatches) {
     EXPECT_TRUE(isEligible(cfg, "wlan0"));
 }
 
-TEST(Eligibility, IncludeGlobIsAllowList) {
+TEST(Eligibility, IncludeGlobIsAllowList)
+{
     Config cfg;
     cfg.include = {"wg*", "wlan0"};
     EXPECT_TRUE(isEligible(cfg, "wg0"));
@@ -84,7 +98,8 @@ TEST(Eligibility, IncludeGlobIsAllowList) {
     EXPECT_FALSE(isEligible(cfg, "eth0"));
 }
 
-TEST(Eligibility, IncludeTakesPrecedenceOverExcludeWhenBothSetButExcludeIsNoop) {
+TEST(Eligibility, IncludeTakesPrecedenceOverExcludeWhenBothSetButExcludeIsNoop)
+{
     Config cfg;
     cfg.include = {"wg*"};
     cfg.exclude = {"*"}; // documented no-op pattern
@@ -92,7 +107,8 @@ TEST(Eligibility, IncludeTakesPrecedenceOverExcludeWhenBothSetButExcludeIsNoop) 
     EXPECT_FALSE(isEligible(cfg, "eth0"));
 }
 
-TEST(Eligibility, WildcardIncludeIsNoop) {
+TEST(Eligibility, WildcardIncludeIsNoop)
+{
     Config cfg;
     cfg.include = {"*"};
     cfg.exclude = {"docker*"};
@@ -100,7 +116,8 @@ TEST(Eligibility, WildcardIncludeIsNoop) {
     EXPECT_TRUE(isEligible(cfg, "wlan0"));
 }
 
-TEST(Resolve, TargetAndLabelFallBackToDefaults) {
+TEST(Resolve, TargetAndLabelFallBackToDefaults)
+{
     Config cfg;
     cfg.defaultTarget = "1.1.1.1";
     InterfaceOverride ov;
@@ -114,7 +131,8 @@ TEST(Resolve, TargetAndLabelFallBackToDefaults) {
     EXPECT_EQ(resolveLabel(cfg, "wlan0"), "wlan0");
 }
 
-TEST(Resolve, Target6FallsBackToDefaultTarget6OrEmpty) {
+TEST(Resolve, Target6FallsBackToDefaultTarget6OrEmpty)
+{
     Config cfg;
     cfg.defaultTarget6 = "2606:4700:4700::1111";
     InterfaceOverride ov;
@@ -129,7 +147,8 @@ TEST(Resolve, Target6FallsBackToDefaultTarget6OrEmpty) {
     EXPECT_EQ(resolveTarget6(noDefault, "wlan0"), "");
 }
 
-TEST(Config, BothIncludeAndExcludePopulatedIsAFatalError) {
+TEST(Config, BothIncludeAndExcludePopulatedIsAFatalError)
+{
     TempConfigFile f(R"YAML(
 include: ["wg*"]
 exclude: ["docker*"]
@@ -137,7 +156,8 @@ exclude: ["docker*"]
     EXPECT_EXIT(loadConfig(f.path()), ::testing::ExitedWithCode(1), "config error");
 }
 
-TEST(EnsureConfigExists, WritesDefaultFileOnlyWhenMissing) {
+TEST(EnsureConfigExists, WritesDefaultFileOnlyWhenMissing)
+{
     fs::path dir = fs::temp_directory_path() / "conwatch-test-ensure";
     fs::remove_all(dir);
     std::string path = (dir / "config.yaml").string();

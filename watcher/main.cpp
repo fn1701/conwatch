@@ -13,15 +13,16 @@
 #include "netlink.hpp"
 #include "process_manager.hpp"
 
-#include <cstdio>
-#include <csignal>
 #include <cerrno>
+#include <csignal>
+#include <cstdio>
 #include <poll.h>
 #include <sys/signalfd.h>
 #include <unistd.h>
 #include <unordered_map>
 
-namespace {
+namespace
+{
 
 struct IfaceState {
     std::string name;
@@ -32,7 +33,8 @@ volatile sig_atomic_t g_shouldExit = 0;
 
 } // namespace
 
-int main() {
+int main()
+{
     std::string configPath = resolveConfigPath();
     ensureConfigExists(configPath);
     Config cfg = loadConfig(configPath);
@@ -68,13 +70,14 @@ int main() {
         IfaceState &state = ifaces[ifindex];
         state.name = name;
 
-        if (isUp == state.wasUp) return;
+        if (isUp == state.wasUp)
+            return;
         state.wasUp = isUp;
 
         if (isUp) {
-            if (!isEligible(cfg, name)) return;
-            processes.start(name, resolveTarget(cfg, name), resolveTarget6(cfg, name),
-                             resolveLabel(cfg, name));
+            if (!isEligible(cfg, name))
+                return;
+            processes.start(name, resolveTarget(cfg, name), resolveTarget6(cfg, name), resolveLabel(cfg, name));
         } else {
             processes.stop(name);
         }
@@ -82,8 +85,10 @@ int main() {
 
     auto onRemoved = [&](int ifindex) {
         auto it = ifaces.find(ifindex);
-        if (it == ifaces.end()) return;
-        if (it->second.wasUp) processes.stop(it->second.name);
+        if (it == ifaces.end())
+            return;
+        if (it->second.wasUp)
+            processes.stop(it->second.name);
         ifaces.erase(it);
     };
 
@@ -96,7 +101,8 @@ int main() {
     while (!g_shouldExit) {
         int ready = poll(fds, 2, -1);
         if (ready < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR)
+                continue;
             perror("poll");
             break;
         }

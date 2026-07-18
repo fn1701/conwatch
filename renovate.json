@@ -1,6 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+  "baseBranches": ["dev"],
+  "pre-commit": {
+    "enabled": true
+  },
   "packageRules": [
     {
       "matchUpdateTypes": ["minor", "patch"],

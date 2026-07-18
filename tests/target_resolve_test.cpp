@@ -2,21 +2,24 @@
 
 #include <gtest/gtest.h>
 
-TEST(ResolveTargets, LiteralIPv4NoDnsLookup) {
+TEST(ResolveTargets, LiteralIPv4NoDnsLookup)
+{
     ResolvedTargets t = resolveTargets("1.1.1.1");
     ASSERT_TRUE(t.v4.has_value());
     EXPECT_EQ(*t.v4, "1.1.1.1");
     EXPECT_FALSE(t.v6.has_value());
 }
 
-TEST(ResolveTargets, LiteralIPv6) {
+TEST(ResolveTargets, LiteralIPv6)
+{
     ResolvedTargets t = resolveTargets("2606:4700:4700::1111");
     ASSERT_TRUE(t.v6.has_value());
     EXPECT_EQ(*t.v6, "2606:4700:4700::1111");
     EXPECT_FALSE(t.v4.has_value());
 }
 
-TEST(ResolveTargets, UnresolvableHostnameLeavesBothUnset) {
+TEST(ResolveTargets, UnresolvableHostnameLeavesBothUnset)
+{
     ResolvedTargets t = resolveTargets("this-hostname-should-not-exist.invalid");
     EXPECT_FALSE(t.v4.has_value());
     EXPECT_FALSE(t.v6.has_value());

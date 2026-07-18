@@ -37,15 +37,29 @@ repos:
         args: ["-i"]
         stages: [pre-commit]
 
-  # # C++ linting with clang-tidy
-  # - repo: https://github.com/pocc/pre-commit-hooks
-  #   rev: v1.3.5
-  #   hooks:
-  #     - id: clang-tidy
-  #       name: Lint C++ code with clang-tidy
-  #       types: [ c++ ]
-  #       args: [ "--format-style=file" ]
-  #       stages: [ pre-commit ]
+  # clang-tidy's driver hard-rejects a couple of GCC-only flags that
+  # Qt6's CMake config injects for the real g++ build (see
+  # scripts/filter-compile-commands.py) -- strip them into a separate
+  # compile database before clang-tidy runs.
+  - repo: local
+    hooks:
+      - id: filter-compile-commands
+        name: Strip GCC-only flags for clang-tidy
+        entry: scripts/filter-compile-commands.py build/compile_commands.json build/clang-tidy/compile_commands.json
+        language: system
+        pass_filenames: false
+        types: [c++]
+        stages: [pre-commit]
+
+  # C++ linting with clang-tidy
+  - repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+      - id: clang-tidy
+        name: Lint C++ code with clang-tidy
+        types: [c++]
+        args: ["--format-style=file", "-p=build/clang-tidy"]
+        stages: [pre-commit]
 
   # YAML and Markdown
   - repo: https://github.com/adrienverge/yamllint

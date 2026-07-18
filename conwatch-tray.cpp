@@ -10,12 +10,16 @@
 // target (config's default_target6/target6) reaches conwatch-tray without
 // overriding a literal-IPv4 default_target. Each resolved protocol gets
 // its own raw-socket ICMP ping, once per second, bound to <interface>.
-// Tray icon color reflects worst-of loss severity across
-// protocols that have both a resolved target and a local address of that
-// family on this interface:
-//   green  - last ping succeeded (all active protocols)
-//   yellow - 1-9 consecutive losses (any active protocol)
-//   red    - 10+ consecutive losses (any active protocol)
+// Tray icon color reflects best-of status across protocols that have both
+// a resolved target and a local address of that family on this interface
+// (green as long as at least one is healthy); once every active protocol
+// is failing, the color takes the worse of their individual severities:
+//   green  - last ping succeeded (at least one active protocol)
+//   yellow - 1-9 consecutive losses
+//   blue   - 10+ consecutive losses, but the interface's default gateway
+//            for that protocol responds -- local network is fine, problem
+//            is upstream of the gateway or specific to the target
+//   red    - 10+ consecutive losses, gateway unreachable too
 //
 // The glyph ("4", "6", "4/6", or blank) reflects which protocol(s) are
 // CURRENTLY succeeding, not just configured -- it shrinks/grows as
@@ -52,12 +56,13 @@
 #include <unistd.h>
 #include <utility>
 
+#include "gateway_resolve.hpp"
 #include "target_resolve.hpp"
 
 namespace
 {
 
-constexpr int kFailStreakForRed = 10;
+constexpr int kFailStreakForGatewayCheck = 10;
 constexpr int kFailStreakForSocketRecreate = 10;
 constexpr int kLocalAddressRecheckTicks = 10; // ~10s at the 1s tick interval
 
@@ -161,6 +166,7 @@ public:
 private:
     enum class Severity {
         Green,
+        Blue,
         Yellow,
         Red
     };
@@ -177,6 +183,12 @@ private:
         int failStreak = 0;
         bool hasLocalAddress = false;
         int recheckTicksLeft = 0;
+        // Gateway reachability, checked only while the target itself is
+        // failing (see tickV4()/tickV6()) -- an extra ping incurred only
+        // during an outage, not adding to steady-state per-tick cost.
+        QString gatewayIp;
+        bool gatewayResolved = false;
+        bool gatewayReachable = false;
     };
 
     // Short (<=3 char) tag for an interface name, for display on a small
@@ -238,7 +250,7 @@ private:
         setsockopt(m_v6.sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     }
 
-    bool sendPing4()
+    bool sendPing4(const QString &destIp)
     {
         if (m_v4.sock < 0)
             return false;
@@ -246,7 +258,7 @@ private:
         struct sockaddr_in dst {
         };
         dst.sin_family = AF_INET;
-        if (inet_pton(AF_INET, m_v4.targetIp.toUtf8().constData(), &dst.sin_addr) != 1) {
+        if (inet_pton(AF_INET, destIp.toUtf8().constData(), &dst.sin_addr) != 1) {
             return false;
         }
 
@@ -294,7 +306,7 @@ private:
         }
     }
 
-    bool sendPing6()
+    bool sendPing6(const QString &destIp)
     {
         if (m_v6.sock < 0)
             return false;
@@ -302,7 +314,7 @@ private:
         struct sockaddr_in6 dst {
         };
         dst.sin6_family = AF_INET6;
-        if (inet_pton(AF_INET6, m_v6.targetIp.toUtf8().constData(), &dst.sin6_addr) != 1) {
+        if (inet_pton(AF_INET6, destIp.toUtf8().constData(), &dst.sin6_addr) != 1) {
             return false;
         }
 
@@ -365,19 +377,56 @@ private:
         t.recheckTicksLeft = kLocalAddressRecheckTicks;
     }
 
+    // Checks reachability of the interface's default gateway for `family`,
+    // only called while the target itself is failing -- an extra ping
+    // incurred only during an outage, not adding to steady-state per-tick
+    // cost. The gateway address is resolved once (via the routing table)
+    // and cached; a route change (e.g. gateway renumbering) is picked up
+    // naturally on the next process restart, same as target resolution.
+    void checkGateway4(ProtoTrack &t)
+    {
+        if (!t.gatewayResolved) {
+            t.gatewayResolved = true;
+            if (auto gw = resolveGateway(m_iface.toStdString(), AF_INET))
+                t.gatewayIp = QString::fromStdString(*gw);
+        }
+        if (t.gatewayIp.isEmpty()) {
+            t.gatewayReachable = false;
+            return;
+        }
+        t.gatewayReachable = sendPing4(t.gatewayIp) && recvReply4();
+    }
+
+    void checkGateway6(ProtoTrack &t)
+    {
+        if (!t.gatewayResolved) {
+            t.gatewayResolved = true;
+            if (auto gw = resolveGateway(m_iface.toStdString(), AF_INET6))
+                t.gatewayIp = QString::fromStdString(*gw);
+        }
+        if (t.gatewayIp.isEmpty()) {
+            t.gatewayReachable = false;
+            return;
+        }
+        t.gatewayReachable = sendPing6(t.gatewayIp) && recvReply6();
+    }
+
     void tickV4()
     {
         maybeRecheckLocalAddress(m_v4, AF_INET);
         if (!m_v4.configured || !m_v4.hasLocalAddress)
             return;
 
-        bool ok = sendPing4() && recvReply4();
+        bool ok = sendPing4(m_v4.targetIp) && recvReply4();
         if (ok) {
             m_v4.failStreak = 0;
+            m_v4.gatewayReachable = false;
         } else {
             m_v4.failStreak++;
             if (m_v4.failStreak % kFailStreakForSocketRecreate == 0)
                 openSocket4();
+            if (m_v4.failStreak >= kFailStreakForGatewayCheck)
+                checkGateway4(m_v4);
         }
     }
 
@@ -387,13 +436,16 @@ private:
         if (!m_v6.configured || !m_v6.hasLocalAddress)
             return;
 
-        bool ok = sendPing6() && recvReply6();
+        bool ok = sendPing6(m_v6.targetIp) && recvReply6();
         if (ok) {
             m_v6.failStreak = 0;
+            m_v6.gatewayReachable = false;
         } else {
             m_v6.failStreak++;
             if (m_v6.failStreak % kFailStreakForSocketRecreate == 0)
                 openSocket6();
+            if (m_v6.failStreak >= kFailStreakForGatewayCheck)
+                checkGateway6(m_v6);
         }
     }
 
@@ -404,9 +456,19 @@ private:
         return t.failStreak == 0 ? ProtoState::Healthy : ProtoState::Failing;
     }
 
+    // Severity while failing: below kFailStreakForGatewayCheck consecutive
+    // losses, always yellow. At/above that threshold, the target check
+    // hands off entirely to the gateway check -- blue if the gateway
+    // responds (local network fine, problem is upstream of the gateway or
+    // specific to the target), red if it doesn't (mirrors the target
+    // check's own healthy/unhealthy logic, just aimed at the gateway).
+    // There is no separate loss-count-based red: yellow transitions
+    // directly to blue or red at the threshold, never both.
     static Severity severityOf(const ProtoTrack &t)
     {
-        return t.failStreak >= kFailStreakForRed ? Severity::Red : Severity::Yellow;
+        if (t.failStreak < kFailStreakForGatewayCheck)
+            return Severity::Yellow;
+        return t.gatewayReachable ? Severity::Blue : Severity::Red;
     }
 
     void tick()
@@ -414,7 +476,8 @@ private:
         tickV4();
         tickV6();
 
-        auto state = std::make_tuple(m_v4.failStreak, m_v4.hasLocalAddress, m_v6.failStreak, m_v6.hasLocalAddress);
+        auto state =
+            std::make_tuple(m_v4.failStreak, m_v4.hasLocalAddress, m_v4.gatewayReachable, m_v6.failStreak, m_v6.hasLocalAddress, m_v6.gatewayReachable);
         if (state != m_lastTickState) {
             m_lastTickState = state;
             renderTray();
@@ -427,37 +490,56 @@ private:
         ProtoState v6State = stateOf(m_v6);
 
         QString glyph;
-        if (v4State == ProtoState::Healthy)
+        if (v4State == ProtoState::Healthy || severityOf(m_v4) == Severity::Blue)
             glyph += "4";
-        if (v6State == ProtoState::Healthy) {
+        if (v6State == ProtoState::Healthy || severityOf(m_v6) == Severity::Blue) {
             if (!glyph.isEmpty())
                 glyph += "/";
             glyph += "6";
         }
 
-        // Best-of across active protocols: green as long as at least one
-        // reaches the target, even if the other is failing -- only when
-        // every active protocol is failing does the color escalate, taking
-        // the worse of their severities.
-        Severity color = Severity::Green; // healthy, or neither protocol active
-        if (v4State == ProtoState::Healthy || v6State == ProtoState::Healthy) {
+        // No worst-of/best-of ranking between protocols: each active
+        // protocol's severity is fully independent. Green/blue take
+        // priority display-wise over yellow only in the sense that a
+        // protocol reaching its target or gateway is good news on its
+        // own -- but red is reserved for total failure, so it's only
+        // shown when every active protocol has independently gone red
+        // (target down AND gateway unreachable on all of them).
+        bool anyHealthy = v4State == ProtoState::Healthy || v6State == ProtoState::Healthy;
+        bool anyBlue = severityOf(m_v4) == Severity::Blue || severityOf(m_v6) == Severity::Blue;
+        bool anyYellow = (v4State == ProtoState::Failing && severityOf(m_v4) == Severity::Yellow)
+            || (v6State == ProtoState::Failing && severityOf(m_v6) == Severity::Yellow);
+
+        Severity color = Severity::Green;
+        if (anyHealthy) {
             // leave as Green
-        } else if (v4State == ProtoState::Failing && v6State == ProtoState::Failing) {
-            color = severityOf(m_v4) == Severity::Red ? Severity::Red : severityOf(m_v6);
-        } else if (v4State == ProtoState::Failing) {
-            color = severityOf(m_v4);
-        } else if (v6State == ProtoState::Failing) {
-            color = severityOf(m_v6);
+        } else if (anyBlue) {
+            color = Severity::Blue;
+        } else if (anyYellow) {
+            color = Severity::Yellow;
+        } else if (v4State == ProtoState::Failing || v6State == ProtoState::Failing) {
+            // Every active protocol is failing, none healthy/blue/yellow --
+            // i.e. every active protocol has independently gone red.
+            color = Severity::Red;
         }
 
         setIcon(color, glyph);
 
+        auto statusText = [](const QString &tag, ProtoState state, const ProtoTrack &t) {
+            if (state == ProtoState::Healthy)
+                return QString("%1 connected").arg(tag);
+            QString text = QString("%1: %2 consecutive losses").arg(tag).arg(t.failStreak);
+            if (t.gatewayReachable)
+                text += " (gateway reachable)";
+            return text;
+        };
+
         QStringList parts;
         if (v4State != ProtoState::NoLocalAddress) {
-            parts << (v4State == ProtoState::Healthy ? "v4 connected" : QString("v4: %1 consecutive losses").arg(m_v4.failStreak));
+            parts << statusText("v4", v4State, m_v4);
         }
         if (v6State != ProtoState::NoLocalAddress) {
-            parts << (v6State == ProtoState::Healthy ? "v6 connected" : QString("v6: %1 consecutive losses").arg(m_v6.failStreak));
+            parts << statusText("v6", v6State, m_v6);
         }
         QString status = parts.isEmpty() ? QString("%1: no target resolved").arg(m_label) : QString("%1: %2").arg(m_label, parts.join(", "));
         m_statusAction->setText(status);
@@ -527,6 +609,9 @@ private:
         case Severity::Green:
             qc = QColor(0x2e, 0xcc, 0x71);
             break;
+        case Severity::Blue:
+            qc = QColor(0x34, 0x98, 0xdb);
+            break;
         case Severity::Yellow:
             qc = QColor(0xf1, 0xc4, 0x0f);
             break;
@@ -568,12 +653,13 @@ private:
     QString m_currentGlyph = "\x01"; // sentinel, never equals a real glyph, forces first render
     std::map<std::pair<int, QString>, QIcon> m_iconCache;
     QString m_currentTooltip;
-    // (v4 failStreak, v4 hasLocalAddress, v6 failStreak, v6 hasLocalAddress)
-    // as of the last tick that actually changed something -- lets tick()
-    // skip renderTray() entirely (and thus touching the tray widget at all)
-    // on ticks where nothing changed, instead of calling it every second
-    // and relying on renderTray()'s own internal no-op checks.
-    std::tuple<int, bool, int, bool> m_lastTickState{-1, false, -1, false};
+    // (v4 failStreak, v4 hasLocalAddress, v4 gatewayReachable, v6 failStreak,
+    // v6 hasLocalAddress, v6 gatewayReachable) as of the last tick that
+    // actually changed something -- lets tick() skip renderTray() entirely
+    // (and thus touching the tray widget at all) on ticks where nothing
+    // changed, instead of calling it every second and relying on
+    // renderTray()'s own internal no-op checks.
+    std::tuple<int, bool, bool, int, bool, bool> m_lastTickState{-1, false, false, -1, false, false};
 };
 
 #include "conwatch-tray.moc"

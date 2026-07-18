@@ -7,14 +7,32 @@ color-coded system tray icon. The target may be a literal IPv4
 address, a literal IPv6 address, or a hostname — a hostname that
 resolves to both an A and AAAA record enables independent IPv4 and
 IPv6 checks on the same interface. A small glyph on the icon ("4",
-"6", or "4/6") shows which protocol(s) are currently succeeding; the
-circle color reflects the worst loss severity across whichever
-protocols have both a resolved target and a local address of that
-family on the interface:
+"6", or "4/6") shows which protocol(s) are currently succeeding or
+in the gateway-reachable "blue" state (see below); the circle color
+follows these rules, checked in order:
 
-- **green** — last ping succeeded (all active protocols)
-- **yellow** — 1-9 consecutive losses (any active protocol)
-- **red** — 10+ consecutive losses (any active protocol)
+- **green** — at least one active protocol's last ping succeeded.
+- **yellow** — no active protocol is green, but at least one has
+  1-9 consecutive losses.
+- **blue** — no active protocol is green or yellow, but at least one
+  has 10+ consecutive losses with its default gateway (resolved once
+  via a netlink `RTM_GETROUTE` dump, see `gateway_resolve.cpp`) still
+  responding — the local network is fine, the problem is upstream of
+  the gateway or specific to the target itself. Checked only once a
+  protocol is already failing, so it's an extra ping incurred only
+  during an outage, not adding to steady-state per-tick cost. See
+  `checkGateway4()`/`checkGateway6()` and `severityOf()` in
+  `conwatch-tray.cpp`.
+- **red** — every active protocol has independently failed both its
+  target and its gateway (10+ consecutive losses with the gateway
+  unreachable too, or no default route at all for that family). The
+  glyph never shows "4"/"6" while red, since by definition no
+  protocol is green or blue at that point.
+
+There is no separate red-only threshold: at 10 consecutive losses a
+protocol goes directly to blue or red depending on gateway
+reachability, never flashing red first while waiting on the gateway
+check.
 
 A protocol with no local address on the interface (e.g. no IPv6
 address assigned) is skipped entirely — never pinged, and excluded

@@ -35,6 +35,7 @@
 #include <QTimer>
 #include <QPainter>
 #include <QPixmap>
+#include <QIcon>
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -47,6 +48,9 @@
 #include <unistd.h>
 #include <cstring>
 #include <cstdio>
+#include <map>
+#include <tuple>
+#include <utility>
 
 #include "target_resolve.hpp"
 
@@ -355,7 +359,13 @@ private:
     void tick() {
         tickV4();
         tickV6();
-        renderTray();
+
+        auto state = std::make_tuple(m_v4.failStreak, m_v4.hasLocalAddress,
+                                      m_v6.failStreak, m_v6.hasLocalAddress);
+        if (state != m_lastTickState) {
+            m_lastTickState = state;
+            renderTray();
+        }
     }
 
     void renderTray() {
@@ -393,7 +403,14 @@ private:
         QString status = parts.isEmpty() ? QString("%1: no target resolved").arg(m_label)
                                           : QString("%1: %2").arg(m_label, parts.join(", "));
         m_statusAction->setText(status);
-        m_tray->setToolTip(status);
+        // Only touch the tooltip when its text actually changes -- calling
+        // setToolTip() every tick (even with identical text) makes some
+        // tray hosts (e.g. Plasma) tear down and re-show an already-open
+        // tooltip, which looks like it vanishing mid-hover.
+        if (status != m_currentTooltip) {
+            m_currentTooltip = status;
+            m_tray->setToolTip(status);
+        }
     }
 
     // True if `candidate` is a worse (or equal-and-nontrivial) severity
@@ -447,10 +464,16 @@ private:
         return pix;
     }
 
-    void setIcon(Severity worst, const QString &glyph) {
-        if (worst == m_currentSeverity && glyph == m_currentGlyph) return;
-        m_currentSeverity = worst;
-        m_currentGlyph = glyph;
+    // Icons only vary by (severity, glyph) -- a small fixed set (3
+    // severities x a handful of glyph strings) for a given process's
+    // fixed m_ifaceTag. Caching by that key means QPainter only runs
+    // once per distinct combo ever seen, not once per tick/transition --
+    // a flapping connection re-uses cached QIcons instead of repainting
+    // 7 pixmap sizes on every bounce.
+    QIcon &iconFor(Severity worst, const QString &glyph) {
+        auto key = std::make_pair(static_cast<int>(worst), glyph);
+        auto it = m_iconCache.find(key);
+        if (it != m_iconCache.end()) return it->second;
 
         QColor qc;
         switch (worst) {
@@ -466,7 +489,14 @@ private:
             icon.addPixmap(renderIcon(size, qc, glyph));
         }
 
-        m_tray->setIcon(icon);
+        return m_iconCache.emplace(key, std::move(icon)).first->second;
+    }
+
+    void setIcon(Severity worst, const QString &glyph) {
+        if (worst == m_currentSeverity && glyph == m_currentGlyph) return;
+        m_currentSeverity = worst;
+        m_currentGlyph = glyph;
+        m_tray->setIcon(iconFor(worst, glyph));
     }
 
     QString m_iface;
@@ -481,6 +511,14 @@ private:
     uint16_t m_seq6 = 0;
     Severity m_currentSeverity = Severity::Yellow;
     QString m_currentGlyph = "\x01"; // sentinel, never equals a real glyph, forces first render
+    std::map<std::pair<int, QString>, QIcon> m_iconCache;
+    QString m_currentTooltip;
+    // (v4 failStreak, v4 hasLocalAddress, v6 failStreak, v6 hasLocalAddress)
+    // as of the last tick that actually changed something -- lets tick()
+    // skip renderTray() entirely (and thus touching the tray widget at all)
+    // on ticks where nothing changed, instead of calling it every second
+    // and relying on renderTray()'s own internal no-op checks.
+    std::tuple<int, bool, int, bool> m_lastTickState{-1, false, -1, false};
 };
 
 #include "conwatch-tray.moc"

@@ -72,6 +72,18 @@ timer):
 - **MTU check** — detect path MTU issues (e.g. via a DF-flagged ping
   at a known size) that manifest as large-packet failures despite
   small pings succeeding — a known VPN/tunnel failure mode.
+- **Blue "gateway reachable, target not" state** — when the
+  configured ping target is failing, additionally ping the
+  interface's default gateway (discoverable via the same
+  `getifaddrs()`/route-table lookup already used for the no-local-
+  address guard, or a netlink `RTM_GETROUTE` query). If the gateway
+  responds while the target doesn't, that's a meaningfully different
+  failure mode than the link itself being down (local network is
+  fine; the problem is upstream of the gateway, or specific to the
+  target) — worth a distinct color (blue) rather than folding it into
+  the same red/yellow loss-severity scale. Only relevant once a
+  target is already failing, so this is an extra ping only incurred
+  during an outage, not adding to steady-state per-tick cost.
 
 Each of these is naturally an additional signal on the same
 per-interface state that `conwatch`/`conwatch-tray` already track, so

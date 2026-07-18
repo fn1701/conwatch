@@ -379,15 +379,22 @@ private:
             glyph += "6";
         }
 
-        Severity worst = Severity::Green;
-        if (v4State != ProtoState::NoLocalAddress && severityWorse(severityOf(m_v4), worst)) {
-            worst = v4State == ProtoState::Healthy ? Severity::Green : severityOf(m_v4);
-        }
-        if (v6State != ProtoState::NoLocalAddress && severityWorse(severityOf(m_v6), worst)) {
-            worst = v6State == ProtoState::Healthy ? Severity::Green : severityOf(m_v6);
+        // Best-of across active protocols: green as long as at least one
+        // reaches the target, even if the other is failing -- only when
+        // every active protocol is failing does the color escalate, taking
+        // the worse of their severities.
+        Severity color = Severity::Green; // healthy, or neither protocol active
+        if (v4State == ProtoState::Healthy || v6State == ProtoState::Healthy) {
+            // leave as Green
+        } else if (v4State == ProtoState::Failing && v6State == ProtoState::Failing) {
+            color = severityOf(m_v4) == Severity::Red ? Severity::Red : severityOf(m_v6);
+        } else if (v4State == ProtoState::Failing) {
+            color = severityOf(m_v4);
+        } else if (v6State == ProtoState::Failing) {
+            color = severityOf(m_v6);
         }
 
-        setIcon(worst, glyph);
+        setIcon(color, glyph);
 
         QStringList parts;
         if (v4State != ProtoState::NoLocalAddress) {
@@ -411,20 +418,6 @@ private:
             m_currentTooltip = status;
             m_tray->setToolTip(status);
         }
-    }
-
-    // True if `candidate` is a worse (or equal-and-nontrivial) severity
-    // than `current`, for worst-of aggregation across protocols.
-    static bool severityWorse(Severity candidate, Severity current) {
-        auto rank = [](Severity s) {
-            switch (s) {
-                case Severity::Green: return 0;
-                case Severity::Yellow: return 1;
-                case Severity::Red: return 2;
-            }
-            return 0;
-        };
-        return rank(candidate) >= rank(current);
     }
 
     QPixmap renderIcon(int kSize, const QColor &qc, const QString &glyph) {

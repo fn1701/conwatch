@@ -9,13 +9,23 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(yaml-cpp REQUIRED)
 
-add_executable(conwatch-tray conwatch-tray.cpp target_resolve.cpp gateway_resolve.cpp)
+add_executable(conwatch-tray
+    conwatch-tray.cpp
+    ping_monitor.cpp
+    ping_monitor_socket.cpp
+    ping_monitor_tick.cpp
+    ping_monitor_render.cpp
+    target_resolve.cpp
+    gateway_resolve.cpp
+)
 target_link_libraries(conwatch-tray PRIVATE Qt6::Widgets)
 
 add_executable(conwatch
     watcher/main.cpp
     watcher/netlink.cpp
     watcher/config.cpp
+    watcher/config_load.cpp
+    watcher/config_resolve.cpp
     watcher/process_manager.cpp
 )
 target_link_libraries(conwatch PRIVATE yaml-cpp::yaml-cpp)
@@ -32,6 +42,8 @@ if(CONWATCH_BUILD_TESTS)
         tests/target_resolve_test.cpp
         tests/gateway_resolve_test.cpp
         watcher/config.cpp
+        watcher/config_load.cpp
+        watcher/config_resolve.cpp
         target_resolve.cpp
         gateway_resolve.cpp
     )

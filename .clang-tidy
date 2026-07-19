@@ -7,6 +7,7 @@ Checks: >
   cppcoreguidelines-init-variables,
   cppcoreguidelines-slicing,
   clang-analyzer-*,
+  readability-identifier-naming,
   -readability-magic-numbers,
   -readability-identifier-length,
   -modernize-use-trailing-return-type,
@@ -15,3 +16,33 @@ Checks: >
 WarningsAsErrors: ''
 HeaderFilterRegex: '.*\.(hpp|h)$'
 FormatStyle: file
+
+# Qt/KDE naming convention: PascalCase types, camelCase functions/members,
+# m_ prefix for class member variables, PascalCase for constexpr constants.
+CheckOptions:
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.MethodCase
+    value: camelBack
+  - key: readability-identifier-naming.VariableCase
+    value: camelBack
+  - key: readability-identifier-naming.ParameterCase
+    value: camelBack
+  - key: readability-identifier-naming.MemberCase
+    value: camelBack
+  - key: readability-identifier-naming.PrivateMemberPrefix
+    value: m_
+  - key: readability-identifier-naming.ProtectedMemberPrefix
+    value: m_
+  - key: readability-identifier-naming.ConstexprVariableCase
+    value: CamelCase
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: CamelCase

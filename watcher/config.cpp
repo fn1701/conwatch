@@ -3,16 +3,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
-#include <fnmatch.h>
 #include <fstream>
-#include <yaml-cpp/yaml.h>
 
 namespace fs = std::filesystem;
 
 namespace
 {
 
-constexpr const char *kDefaultConfigYaml = R"YAML(# conwatch configuration
+constexpr const char *DefaultConfigYaml = R"YAML(# conwatch configuration
 # Auto-generated with default values on first run. Edit and save --
 # the watcher re-reads this file on next start (no live-reload).
 
@@ -57,129 +55,64 @@ exclude:
 interfaces: {}
 )YAML";
 
-bool isNoopPattern(const std::vector<std::string> &patterns)
+// Locates and creates the on-disk config file.
+class ConfigFile
 {
-    return patterns.size() == 1 && patterns[0] == "*";
-}
+public:
+    static std::string resolvePath()
+    {
+        const char *xdgConfig = std::getenv("XDG_CONFIG_HOME");
+        fs::path base = (xdgConfig && *xdgConfig) ? fs::path(xdgConfig) : homeConfigDir();
+        return (base / "conwatch" / "config.yaml").string();
+    }
+
+    // Writes the default config to `path` if it doesn't already exist
+    // (temp-file-then-rename to avoid partial writes). Returns true if
+    // a new file was created.
+    static bool ensureExists(const std::string &path)
+    {
+        if (fs::exists(path))
+            return false;
+
+        fs::path p(path);
+        fs::create_directories(p.parent_path());
+        writeDefaultConfig(p);
+
+        fprintf(stderr, "conwatch: created default config at %s\n", path.c_str());
+        return true;
+    }
+
+private:
+    static fs::path homeConfigDir()
+    {
+        const char *home = std::getenv("HOME");
+        return fs::path(home ? home : ".") / ".config";
+    }
+
+    static void writeDefaultConfig(const fs::path &p)
+    {
+        fs::path tmp = p;
+        tmp += ".tmp";
+        {
+            std::ofstream out(tmp, std::ios::trunc);
+            out << DefaultConfigYaml;
+        }
+        fs::rename(tmp, p);
+    }
+};
 
 } // namespace
 
+// Free function kept as the public API contract declared in
+// config.hpp; the real implementation is ConfigFile above.
 std::string resolveConfigPath()
 {
-    const char *xdgConfig = std::getenv("XDG_CONFIG_HOME");
-    fs::path base = (xdgConfig && *xdgConfig) ? fs::path(xdgConfig) : fs::path(std::getenv("HOME") ? std::getenv("HOME") : ".") / ".config";
-    return (base / "conwatch" / "config.yaml").string();
+    return ConfigFile::resolvePath();
 }
 
+// Free function kept as the public API contract declared in
+// config.hpp; the real implementation is ConfigFile above.
 bool ensureConfigExists(const std::string &path)
 {
-    if (fs::exists(path))
-        return false;
-
-    fs::path p(path);
-    fs::create_directories(p.parent_path());
-
-    fs::path tmp = p;
-    tmp += ".tmp";
-
-    {
-        std::ofstream out(tmp, std::ios::trunc);
-        out << kDefaultConfigYaml;
-    }
-    fs::rename(tmp, p);
-
-    fprintf(stderr, "conwatch: created default config at %s\n", path.c_str());
-    return true;
-}
-
-Config loadConfig(const std::string &path)
-{
-    Config cfg;
-
-    YAML::Node root = YAML::LoadFile(path);
-
-    if (root["default_target"]) {
-        cfg.defaultTarget = root["default_target"].as<std::string>();
-    }
-    if (root["default_target6"]) {
-        cfg.defaultTarget6 = root["default_target6"].as<std::string>();
-    }
-    if (root["include"]) {
-        for (auto n : root["include"])
-            cfg.include.push_back(n.as<std::string>());
-    }
-    if (root["exclude"]) {
-        for (auto n : root["exclude"])
-            cfg.exclude.push_back(n.as<std::string>());
-    }
-    if (root["interfaces"]) {
-        for (auto it : root["interfaces"]) {
-            InterfaceOverride ov;
-            std::string ifaceName = it.first.as<std::string>();
-            YAML::Node node = it.second;
-            ov.label = node["label"] ? node["label"].as<std::string>() : ifaceName;
-            if (node["target"])
-                ov.target = node["target"].as<std::string>();
-            if (node["target6"])
-                ov.target6 = node["target6"].as<std::string>();
-            cfg.interfaces[ifaceName] = ov;
-        }
-    }
-
-    bool includeReal = !cfg.include.empty() && !isNoopPattern(cfg.include);
-    bool excludeReal = !cfg.exclude.empty() && !isNoopPattern(cfg.exclude);
-    if (includeReal && excludeReal) {
-        fprintf(stderr,
-                "conwatch: config error: both include and exclude are "
-                "populated with real patterns in %s. Exactly one must be used "
-                "-- leave the other empty ([]) or set it to [\"*\"].\n",
-                path.c_str());
-        exit(1);
-    }
-
-    return cfg;
-}
-
-bool isEligible(const Config &cfg, const std::string &name)
-{
-    auto matchesAny = [&name](const std::vector<std::string> &patterns) {
-        for (const auto &p : patterns) {
-            if (fnmatch(p.c_str(), name.c_str(), 0) == 0)
-                return true;
-        }
-        return false;
-    };
-
-    bool includeReal = !cfg.include.empty() && !isNoopPattern(cfg.include);
-    if (includeReal)
-        return matchesAny(cfg.include);
-
-    if (!cfg.exclude.empty())
-        return !matchesAny(cfg.exclude);
-
-    return true;
-}
-
-std::string resolveTarget(const Config &cfg, const std::string &iface)
-{
-    auto it = cfg.interfaces.find(iface);
-    if (it != cfg.interfaces.end() && it->second.target)
-        return *it->second.target;
-    return cfg.defaultTarget;
-}
-
-std::string resolveLabel(const Config &cfg, const std::string &iface)
-{
-    auto it = cfg.interfaces.find(iface);
-    if (it != cfg.interfaces.end() && !it->second.label.empty())
-        return it->second.label;
-    return iface;
-}
-
-std::string resolveTarget6(const Config &cfg, const std::string &iface)
-{
-    auto it = cfg.interfaces.find(iface);
-    if (it != cfg.interfaces.end() && it->second.target6)
-        return *it->second.target6;
-    return cfg.defaultTarget6.value_or("");
+    return ConfigFile::ensureExists(path);
 }

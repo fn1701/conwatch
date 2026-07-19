@@ -7,22 +7,12 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-namespace
-{
-
-// Determine "operationally up with carrier": administratively enabled,
-// kernel-reported running, and driver-reported link/carrier present.
-// This is what distinguishes an admin-up ethernet port with an
-// unplugged cable (or a WiFi radio on but not associated) from an
-// interface actually usable for pinging.
-bool isOperationallyUp(unsigned int flags)
-{
-    return (flags & IFF_UP) && (flags & IFF_RUNNING) && (flags & IFF_LOWER_UP);
-}
-
-} // namespace
-
 NetlinkWatcher::NetlinkWatcher() = default;
+
+int NetlinkWatcher::fd() const
+{
+    return m_fd;
+}
 
 NetlinkWatcher::~NetlinkWatcher()
 {
@@ -76,27 +66,35 @@ void NetlinkWatcher::requestDump()
     }
 }
 
+std::string NetlinkWatcher::extractIfName(const struct nlmsghdr *nlh, const struct ifinfomsg *ifi)
+{
+    std::string name;
+    int attrLen = IFLA_PAYLOAD(nlh);
+    for (const struct rtattr *rta = IFLA_RTA(ifi); RTA_OK(rta, attrLen); rta = RTA_NEXT(rta, attrLen)) {
+        if (rta->rta_type == IFLA_IFNAME) {
+            name.assign(static_cast<const char *>(RTA_DATA(rta)),
+                        RTA_PAYLOAD(rta) - 1); // drop trailing NUL
+            break;
+        }
+    }
+    return name;
+}
+
+bool NetlinkWatcher::isOperationallyUp(unsigned int flags)
+{
+    return (flags & IFF_UP) && (flags & IFF_RUNNING) && (flags & IFF_LOWER_UP);
+}
+
 void NetlinkWatcher::handleMessage(const void *data, size_t len, const LinkChangeCallback &onChange, const LinkRemovedCallback &onRemoved)
 {
     for (const struct nlmsghdr *nlh = static_cast<const struct nlmsghdr *>(data); NLMSG_OK(nlh, len); nlh = NLMSG_NEXT(nlh, len)) {
-        if (nlh->nlmsg_type == NLMSG_DONE || nlh->nlmsg_type == NLMSG_ERROR) {
+        if (nlh->nlmsg_type == NLMSG_DONE || nlh->nlmsg_type == NLMSG_ERROR)
             continue;
-        }
-        if (nlh->nlmsg_type != RTM_NEWLINK && nlh->nlmsg_type != RTM_DELLINK) {
+        if (nlh->nlmsg_type != RTM_NEWLINK && nlh->nlmsg_type != RTM_DELLINK)
             continue;
-        }
 
-        auto *ifi = static_cast<const struct ifinfomsg *>(NLMSG_DATA(nlh));
-
-        std::string name;
-        int attrLen = IFLA_PAYLOAD(nlh);
-        for (const struct rtattr *rta = IFLA_RTA(ifi); RTA_OK(rta, attrLen); rta = RTA_NEXT(rta, attrLen)) {
-            if (rta->rta_type == IFLA_IFNAME) {
-                name.assign(static_cast<const char *>(RTA_DATA(rta)),
-                            RTA_PAYLOAD(rta) - 1); // drop trailing NUL
-                break;
-            }
-        }
+        const auto *ifi = static_cast<const struct ifinfomsg *>(NLMSG_DATA(nlh));
+        std::string name = extractIfName(nlh, ifi);
 
         if (nlh->nlmsg_type == RTM_DELLINK) {
             onRemoved(ifi->ifi_index);

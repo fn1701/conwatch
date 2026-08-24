@@ -17,7 +17,7 @@ jobs:
           pacman -Syu --noconfirm
           pacman -S --noconfirm git cmake make gcc pkgconf qt6-base yaml-cpp gtest iproute2 procps-ng
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCONWATCH_BUILD_TESTS=ON .

@@ -19,6 +19,10 @@ struct Config {
     std::unordered_map<std::string, InterfaceOverride> interfaces;
 };
 
+// Implemented across config.cpp (path/default-file creation),
+// config_load.cpp (loadConfig/isEligible), and config_resolve.cpp
+// (per-interface target/label resolution).
+
 // Resolves ~/.config/nettray/config.yaml (respecting $XDG_CONFIG_HOME).
 std::string resolveConfigPath();
 

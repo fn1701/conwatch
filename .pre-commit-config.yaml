@@ -8,7 +8,7 @@
 repos:
   # Git checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v4.6.0
     hooks:
       - id: trailing-whitespace
         name: Trim trailing whitespace
@@ -53,7 +53,7 @@ repos:
 
   # C++ linting with clang-tidy
   - repo: https://github.com/pocc/pre-commit-hooks
-    rev: v1.3.5
+    rev: v1.4.0
     hooks:
       - id: clang-tidy
         name: Lint C++ code with clang-tidy
@@ -63,7 +63,7 @@ repos:
 
   # YAML and Markdown
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.33.0
+    rev: v1.38.0
     hooks:
       - id: yamllint
         name: Lint YAML files
@@ -75,7 +75,7 @@ repos:
 
   # General
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v4.6.0
     hooks:
       - id: name-tests-test
         name: Check test file naming

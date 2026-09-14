@@ -29,7 +29,148 @@ struct IfaceState {
     bool wasUp = false;
 };
 
-volatile sig_atomic_t g_shouldExit = 0;
+// Owns the daemon's netlink/signal poll loop: reacts to interface
+// up/down transitions by starting/stopping conwatch-tray children, and
+// to SIGCHLD/SIGTERM/SIGINT via a signalfd read inside the same loop
+// (not an async-signal-handler context, so plain member state is safe
+// in place of a volatile sig_atomic_t global).
+class Watcher
+{
+public:
+    Watcher(Config cfg, std::string configPath)
+        : m_cfg(std::move(cfg))
+        , m_configPath(std::move(configPath))
+    {
+    }
+
+    int run()
+    {
+        if (!m_netlink.open()) {
+            fprintf(stderr, "conwatch: failed to open netlink socket\n");
+            return 1;
+        }
+        if (!openSignalFd())
+            return 1;
+
+        fprintf(stderr, "conwatch: running (config: %s)\n", m_configPath.c_str());
+        poll();
+
+        fprintf(stderr, "conwatch: shutting down\n");
+        m_processes.stopAll();
+        close(m_sigFd);
+        return 0;
+    }
+
+private:
+    // Blocks the signals we want to receive via signalfd, so the
+    // default disposition never races with our poll() loop.
+    bool openSignalFd()
+    {
+        sigset_t mask;
+        sigemptyset(&mask);
+        sigaddset(&mask, SIGCHLD);
+        sigaddset(&mask, SIGTERM);
+        sigaddset(&mask, SIGINT);
+        if (sigprocmask(SIG_BLOCK, &mask, nullptr) < 0) {
+            perror("sigprocmask");
+            return false;
+        }
+
+        m_sigFd = signalfd(-1, &mask, SFD_CLOEXEC | SFD_NONBLOCK);
+        if (m_sigFd < 0) {
+            perror("signalfd");
+            return false;
+        }
+        return true;
+    }
+
+    void poll()
+    {
+        struct pollfd fds[2];
+        fds[0] = {m_netlink.fd(), POLLIN, 0};
+        fds[1] = {m_sigFd, POLLIN, 0};
+
+        while (!m_shouldExit) {
+            int ready = ::poll(fds, 2, -1);
+            if (ready < 0) {
+                if (errno == EINTR)
+                    continue;
+                perror("poll");
+                break;
+            }
+
+            if (fds[0].revents & POLLIN)
+                m_netlink.processPendingMessages(onChangeCallback(), onRemovedCallback());
+            if (fds[1].revents & POLLIN)
+                handleSignals();
+        }
+    }
+
+    void handleSignals()
+    {
+        struct signalfd_siginfo si;
+        while (read(m_sigFd, &si, sizeof(si)) == sizeof(si)) {
+            if (si.ssi_signo == SIGCHLD)
+                m_processes.reapExited();
+            else
+                m_shouldExit = true;
+        }
+    }
+
+    NetlinkWatcher::LinkChangeCallback onChangeCallback()
+    {
+        return [this](int ifindex, const std::string &name, bool isUp) {
+            onChange(ifindex, name, isUp);
+        };
+    }
+
+    NetlinkWatcher::LinkRemovedCallback onRemovedCallback()
+    {
+        return [this](int ifindex) {
+            onRemoved(ifindex);
+        };
+    }
+
+    void onChange(int ifindex, const std::string &name, bool isUp)
+    {
+        IfaceState &state = m_ifaces[ifindex];
+        state.name = name;
+
+        if (isUp == state.wasUp)
+            return;
+        state.wasUp = isUp;
+
+        if (isUp)
+            startIfEligible(name);
+        else
+            m_processes.stop(name);
+    }
+
+    void startIfEligible(const std::string &name)
+    {
+        if (!isEligible(m_cfg, name))
+            return;
+        m_processes.start(name, resolveTarget(m_cfg, name), resolveTarget6(m_cfg, name), resolveLabel(m_cfg, name));
+    }
+
+    void onRemoved(int ifindex)
+    {
+        auto it = m_ifaces.find(ifindex);
+        if (it == m_ifaces.end())
+            return;
+        if (it->second.wasUp)
+            m_processes.stop(it->second.name);
+        m_ifaces.erase(it);
+    }
+
+    Config m_cfg;
+    std::string m_configPath;
+    NetlinkWatcher m_netlink;
+    ProcessManager m_processes;
+    std::unordered_map<int, IfaceState> m_ifaces;
+    int m_sigFd = -1;
+    bool m_shouldExit = false;
+};
 
 } // namespace
 
@@ -37,94 +178,7 @@ int main()
 {
     std::string configPath = resolveConfigPath();
     ensureConfigExists(configPath);
-    Config cfg = loadConfig(configPath);
 
-    NetlinkWatcher netlink;
-    if (!netlink.open()) {
-        fprintf(stderr, "conwatch: failed to open netlink socket\n");
-        return 1;
-    }
-
-    ProcessManager processes;
-    std::unordered_map<int, IfaceState> ifaces; // by ifindex
-
-    // Block the signals we want to receive via signalfd, so the
-    // default disposition never races with our poll() loop.
-    sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGCHLD);
-    sigaddset(&mask, SIGTERM);
-    sigaddset(&mask, SIGINT);
-    if (sigprocmask(SIG_BLOCK, &mask, nullptr) < 0) {
-        perror("sigprocmask");
-        return 1;
-    }
-
-    int sigFd = signalfd(-1, &mask, SFD_CLOEXEC | SFD_NONBLOCK);
-    if (sigFd < 0) {
-        perror("signalfd");
-        return 1;
-    }
-
-    auto onChange = [&](int ifindex, const std::string &name, bool isUp) {
-        IfaceState &state = ifaces[ifindex];
-        state.name = name;
-
-        if (isUp == state.wasUp)
-            return;
-        state.wasUp = isUp;
-
-        if (isUp) {
-            if (!isEligible(cfg, name))
-                return;
-            processes.start(name, resolveTarget(cfg, name), resolveTarget6(cfg, name), resolveLabel(cfg, name));
-        } else {
-            processes.stop(name);
-        }
-    };
-
-    auto onRemoved = [&](int ifindex) {
-        auto it = ifaces.find(ifindex);
-        if (it == ifaces.end())
-            return;
-        if (it->second.wasUp)
-            processes.stop(it->second.name);
-        ifaces.erase(it);
-    };
-
-    fprintf(stderr, "conwatch: running (config: %s)\n", configPath.c_str());
-
-    struct pollfd fds[2];
-    fds[0] = {netlink.fd(), POLLIN, 0};
-    fds[1] = {sigFd, POLLIN, 0};
-
-    while (!g_shouldExit) {
-        int ready = poll(fds, 2, -1);
-        if (ready < 0) {
-            if (errno == EINTR)
-                continue;
-            perror("poll");
-            break;
-        }
-
-        if (fds[0].revents & POLLIN) {
-            netlink.processPendingMessages(onChange, onRemoved);
-        }
-
-        if (fds[1].revents & POLLIN) {
-            struct signalfd_siginfo si;
-            while (read(sigFd, &si, sizeof(si)) == sizeof(si)) {
-                if (si.ssi_signo == SIGCHLD) {
-                    processes.reapExited();
-                } else {
-                    g_shouldExit = 1;
-                }
-            }
-        }
-    }
-
-    fprintf(stderr, "conwatch: shutting down\n");
-    processes.stopAll();
-    close(sigFd);
-    return 0;
+    Watcher watcher(loadConfig(configPath), configPath);
+    return watcher.run();
 }

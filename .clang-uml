@@ -41,3 +41,32 @@ diagrams:
         - std
     from:
       - function: "PingMonitor::tick()"
+
+  watcher_main_sequence:
+    type: sequence
+    title: Watcher main() - Sequence Diagram
+    glob:
+      - watcher/main.cpp
+      - watcher/netlink.cpp
+      - watcher/config.cpp
+      - watcher/config_load.cpp
+      - watcher/config_resolve.cpp
+      - watcher/process_manager.cpp
+    exclude:
+      namespaces:
+        - std
+    from:
+      - function: "main()"
+
+  target_gateway_resolve_sequence:
+    type: sequence
+    title: Target/Gateway Resolution - Sequence Diagram
+    glob:
+      - target_resolve.cpp
+      - gateway_resolve.cpp
+    exclude:
+      namespaces:
+        - std
+    from:
+      - function: "resolveTargets(const std::string &)"
+      - function: "resolveGateway(const std::string &,int)"

@@ -1,0 +1,43 @@
+compilation_database_dir: build
+output_directory: docs/diagrams
+
+diagrams:
+  ping_monitor_class:
+    type: class
+    title: PingMonitor - Class Diagram
+    glob:
+      - ping_monitor.cpp
+      - ping_monitor_socket.cpp
+      - ping_monitor_tick.cpp
+      - ping_monitor_render.cpp
+    exclude:
+      namespaces:
+        - std
+    generate_method_arguments: full
+
+  watcher_class:
+    type: class
+    title: Watcher - Class Diagram
+    glob:
+      - watcher/main.cpp
+      - watcher/netlink.cpp
+      - watcher/config.cpp
+      - watcher/config_load.cpp
+      - watcher/config_resolve.cpp
+      - watcher/process_manager.cpp
+    exclude:
+      namespaces:
+        - std
+    generate_method_arguments: full
+
+  ping_monitor_tick_sequence:
+    type: sequence
+    title: PingMonitor::tick() - Sequence Diagram
+    glob:
+      - ping_monitor_tick.cpp
+      - ping_monitor_socket.cpp
+    exclude:
+      namespaces:
+        - std
+    from:
+      - function: "PingMonitor::tick()"

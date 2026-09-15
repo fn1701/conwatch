@@ -1,0 +1,62 @@
+name: Diagram tooling validation
+
+# Spike workflow: validates the clang-uml + PlantUML pipeline on this branch
+# using the published fn1701/clang-uml-plantuml-docker-tool image, without
+# committing output anywhere. Uploads SVGs/PNGs as a build artifact only so
+# the pipeline can be inspected before deciding on a permanent target
+# (commit-back check, Pages deploy, etc).
+#
+# Runs on the bare ubuntu-latest host (no job-level `container:`) so Docker
+# is available natively for `docker run` against the diagram image -- a
+# containerized job would need docker-in-docker, which GitHub-hosted
+# containerized runners don't support.
+
+on:
+  push:
+    branches: ["diagram-tooling-eval"]
+  workflow_dispatch:
+
+jobs:
+  generate-diagrams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (compile_commands.json only, no build needed)
+        # Runs inside the same archlinux:latest toolchain as the main CI
+        # build (see ci.yml) so Qt6/yaml-cpp headers match what the source
+        # actually needs. Uses the same-path mount as the diagram step
+        # below: compile_commands.json bakes in absolute paths at
+        # configure time, so both containers must see the workspace at the
+        # identical path. Qt6/yaml-cpp headers land under
+        # .ci-headers/usr/include (bind-mounted over the Arch container's
+        # own /usr/include) so the diagram step -- run directly on the bare
+        # runner, which has no such headers of its own -- can mount them
+        # in afterward.
+        run: |
+          mkdir -p .ci-headers/usr/include
+          docker run --rm \
+            -v "$PWD:$PWD" -w "$PWD" \
+            -v "$PWD/.ci-headers/usr/include:/usr/include" \
+            archlinux:latest bash -c '
+              pacman -Syu --noconfirm &&
+              pacman -S --noconfirm cmake make gcc pkgconf qt6-base yaml-cpp &&
+              cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .
+            '
+
+      - name: Generate and render diagrams
+        run: |
+          docker run --rm --network=none \
+            -v "$PWD:$PWD" -w "$PWD" \
+            -v "$PWD/.ci-headers/usr/include/qt6:/usr/include/qt6:ro" \
+            -v "$PWD/.ci-headers/usr/include/yaml-cpp:/usr/include/yaml-cpp:ro" \
+            ghcr.io/fn1701/clang-uml-plantuml-docker-tool:dev \
+            --remove-compile-flag -mno-direct-extern-access \
+            --format svg,png
+
+      - name: Upload generated diagrams
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-uml-diagrams
+          path: docs/diagrams/
+          retention-days: 14

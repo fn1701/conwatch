@@ -1,4 +1,4 @@
-#include "../gateway_resolve.hpp"
+#include "../src/shared/gateway_resolve.hpp"
 
 #include <gtest/gtest.h>
 #include <sys/socket.h>

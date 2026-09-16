@@ -15,14 +15,13 @@ follows these rules, checked in order:
 - **yellow** — no active protocol is green, but at least one has
   1-9 consecutive losses.
 - **blue** — no active protocol is green or yellow, but at least one
-  has 10+ consecutive losses with its default gateway (resolved once
-  via a netlink `RTM_GETROUTE` dump, see `gateway_resolve.cpp`) still
-  responding — the local network is fine, the problem is upstream of
-  the gateway or specific to the target itself. Checked only once a
+  has 10+ consecutive losses with its gateway still responding. The
+  gateway is normally the interface's default route, but can be
+  pinned to a fixed IP or disabled entirely per-protocol via the
+  `gateway_ip_override4`/`gateway_ip_override6` config keys -- e.g. for
+  a tunnel whose only route isn't a default route. Checked only once a
   protocol is already failing, so it's an extra ping incurred only
-  during an outage, not adding to steady-state per-tick cost. See
-  `checkGateway4()`/`checkGateway6()` and `severityOf()` in
-  `conwatch-tray.cpp`.
+  during an outage, not adding to steady-state per-tick cost.
 - **red** — every active protocol has independently failed both its
   target and its gateway (10+ consecutive losses with the gateway
   unreachable too, or no default route at all for that family). The
@@ -184,6 +183,15 @@ exclude:
   - "br-*"
 
 # Per-interface overrides, keyed by exact interface name. Optional.
+#
+# gateway_ip_override4/6 override how the "blue" (gateway-reachable)
+# check sources its gateway for that protocol, instead of resolving the
+# interface's kernel default route: a literal IP pins the gateway to
+# ping, and "none" disables the check entirely (severity goes straight
+# from yellow to red past the loss threshold, never blue). Useful for a
+# tunnel interface (e.g. WireGuard) that routes a private subnet without
+# carrying a default route.
+#
 # interfaces:
 #   wlan0:
 #     label: "WiFi"
@@ -191,6 +199,8 @@ exclude:
 #     label: "VPN"
 #     target: "10.10.0.1"
 #     target6: "fd00::1"
+#     gateway_ip_override4: "10.10.0.1"
+#     gateway_ip_override6: "none"
 interfaces: {}
 ```
 
@@ -216,6 +226,25 @@ literal IPv4 address -- it never overrides a v6 target already
 resolved from `target` itself (e.g. a literal-v6 or hostname-with-AAAA
 `target` takes precedence over `target6`).
 
+`gateway_ip_override4`/`gateway_ip_override6` are per-interface only
+(no `default_gateway_ip_override4/6`, since a fixed gateway or a
+disabled check is inherently specific to one interface/tunnel). Each
+accepts:
+
+- Unset (default) — resolve the kernel default route for that
+  protocol, as before.
+- A literal IP — pin the gateway to ping for the blue check, skipping
+  the default-route lookup entirely. Useful when the interface's only
+  route for that protocol isn't a default route (e.g. a WireGuard
+  tunnel scoped to `AllowedIPs: 10.0.0.0/8` whose peer endpoint inside
+  the tunnel is still a meaningful "local network" check).
+- `"none"` — disable the gateway check for that protocol. Severity
+  goes straight from yellow to red past the loss threshold and never
+  shows blue, for interfaces where no reachable IP inside the tunnel
+  can stand in for "local network is fine" (e.g. a tunnel that only
+  provides internet access, with no gateway/peer address worth
+  pinging).
+
 ## How interface detection works
 
 `conwatch` opens a `NETLINK_ROUTE` socket subscribed to `RTMGRP_LINK`
@@ -239,7 +268,7 @@ network management daemon — it works directly against the kernel.
 - Per-interface `conwatch-tray` children are spawned via
   `fork()`+`execlp()` from a fixed path (`/usr/local/bin/conwatch-tray`);
   a different install location currently requires editing
-  `process_manager.cpp`.
+  `src/watcher/process_manager.cpp`.
 - `conwatch-tray`'s own behavior (ICMP ping logic, socket recreation,
   tray icon rendering) has no automated test coverage — it needs a
   display and a D-Bus tray host, which a CI container doesn't provide.

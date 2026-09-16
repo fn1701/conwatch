@@ -1,6 +1,6 @@
 #include "ping_monitor.hpp"
 
-#include "gateway_resolve.hpp"
+#include "../shared/gateway_resolve.hpp"
 
 #include <net/if.h>
 #include <netinet/in.h>
@@ -37,6 +37,10 @@ void PingMonitor::maybeRecheckLocalAddress(ProtoTrack &t, int family)
 // process restart, same as target resolution.
 void PingMonitor::checkGateway4(ProtoTrack &t)
 {
+    if (t.gatewayMode == GatewayOverride::Mode::Disabled) {
+        t.gatewayReachable = false;
+        return;
+    }
     if (!t.gatewayResolved) {
         t.gatewayResolved = true;
         if (auto gw = resolveGateway(m_iface.toStdString(), AF_INET))
@@ -51,6 +55,10 @@ void PingMonitor::checkGateway4(ProtoTrack &t)
 
 void PingMonitor::checkGateway6(ProtoTrack &t)
 {
+    if (t.gatewayMode == GatewayOverride::Mode::Disabled) {
+        t.gatewayReachable = false;
+        return;
+    }
     if (!t.gatewayResolved) {
         t.gatewayResolved = true;
         if (auto gw = resolveGateway(m_iface.toStdString(), AF_INET6))
@@ -115,7 +123,9 @@ PingMonitor::ProtoState PingMonitor::stateOf(const ProtoTrack &t)
 // target), red if it doesn't (mirrors the target check's own
 // healthy/unhealthy logic, just aimed at the gateway). There is no separate
 // loss-count-based red: yellow transitions directly to blue or red at the
-// threshold, never both.
+// threshold, never both. A gateway_ip_override[46]="none" (Disabled mode)
+// takes the same red branch as an unreachable gateway -- there is no
+// reachability signal to report blue from.
 PingMonitor::Severity PingMonitor::severityOf(const ProtoTrack &t)
 {
     if (t.failStreak < FailStreakForGatewayCheck)

@@ -1,0 +1,72 @@
+compilation_database_dir: build
+output_directory: docs/diagrams
+
+diagrams:
+  ping_monitor_class:
+    type: class
+    title: PingMonitor - Class Diagram
+    glob:
+      - src/ping_monitor.cpp
+      - src/ping_monitor_socket.cpp
+      - src/ping_monitor_tick.cpp
+      - src/ping_monitor_render.cpp
+    exclude:
+      namespaces:
+        - std
+    generate_method_arguments: full
+
+  watcher_class:
+    type: class
+    title: Watcher - Class Diagram
+    glob:
+      - src/watcher/main.cpp
+      - src/watcher/netlink.cpp
+      - src/watcher/config.cpp
+      - src/watcher/config_load.cpp
+      - src/watcher/config_resolve.cpp
+      - src/watcher/process_manager.cpp
+    exclude:
+      namespaces:
+        - std
+    generate_method_arguments: full
+
+  ping_monitor_tick_sequence:
+    type: sequence
+    title: PingMonitor::tick() - Sequence Diagram
+    glob:
+      - src/ping_monitor_tick.cpp
+      - src/ping_monitor_socket.cpp
+    exclude:
+      namespaces:
+        - std
+    from:
+      - function: "PingMonitor::tick()"
+
+  watcher_main_sequence:
+    type: sequence
+    title: Watcher main() - Sequence Diagram
+    glob:
+      - src/watcher/main.cpp
+      - src/watcher/netlink.cpp
+      - src/watcher/config.cpp
+      - src/watcher/config_load.cpp
+      - src/watcher/config_resolve.cpp
+      - src/watcher/process_manager.cpp
+    exclude:
+      namespaces:
+        - std
+    from:
+      - function: "main()"
+
+  target_gateway_resolve_sequence:
+    type: sequence
+    title: Target/Gateway Resolution - Sequence Diagram
+    glob:
+      - src/target_resolve.cpp
+      - src/gateway_resolve.cpp
+    exclude:
+      namespaces:
+        - std
+    from:
+      - function: "resolveTargets(const std::string &)"
+      - function: "resolveGateway(const std::string &,int)"

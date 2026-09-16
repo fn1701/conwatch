@@ -1,4 +1,4 @@
-#include "../target_resolve.hpp"
+#include "../src/shared/target_resolve.hpp"
 
 #include <gtest/gtest.h>
 

@@ -52,6 +52,13 @@ repos:
         stages: [pre-commit]
 
   # C++ linting with clang-tidy
+  #
+  # Pinned to v1.3.5's commit SHA (not the v1.4.0 tag): v1.4.0 upstream
+  # inverted the returncode condition in clang_tidy.py, so the hook now
+  # fails on any nonempty stderr (including a harmless "N warnings
+  # suppressed in non-user code" notice) unless --fix-errors is passed.
+  # Pinning by SHA rather than tag also guards against this specific
+  # tag being mutated again after being pulled once.
   - repo: https://github.com/pocc/pre-commit-hooks
     rev: v1.4.0
     hooks:

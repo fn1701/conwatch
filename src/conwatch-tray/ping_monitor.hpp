@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../shared/gateway_override.hpp"
+
 #include <QColor>
 #include <QIcon>
 #include <QObject>
@@ -14,48 +16,40 @@ class QAction;
 class QSystemTrayIcon;
 struct ifaddrs;
 
-// PingMonitor: per-interface ping monitor with a color-coded system tray icon.
-//
-// <target> may be a literal IPv4 address, a literal IPv6 address, or a
-// hostname (resolved via DNS, which may yield both an A and AAAA record --
-// enabling independent v4/v6 checks on the same interface). <target6>, if
-// non-empty, is an additional literal IPv6 target (or hostname) merged in
-// alongside whatever <target> resolves to -- this is how a default IPv6
-// target (config's default_target6/target6) reaches conwatch-tray without
-// overriding a literal-IPv4 default_target. Each resolved protocol gets
-// its own raw-socket ICMP ping, once per second, bound to <interface>.
-// Tray icon color reflects best-of status across protocols that have both
-// a resolved target and a local address of that family on this interface
-// (green as long as at least one is healthy); once every active protocol
-// is failing, the color takes the worse of their individual severities:
-//   green  - last ping succeeded (at least one active protocol)
-//   yellow - 1-9 consecutive losses
-//   blue   - 10+ consecutive losses, but the interface's default gateway
-//            for that protocol responds -- local network is fine, problem
-//            is upstream of the gateway or specific to the target
-//   red    - 10+ consecutive losses, gateway unreachable too
-//
-// The glyph ("4", "6", "4/6", or blank) reflects which protocol(s) are
-// CURRENTLY succeeding, not just configured -- it shrinks/grows as
-// protocols fail/recover.
-//
-// After 10 consecutive losses on a protocol, that protocol's raw socket is
-// closed and recreated (re-resolving the interface index and rebinding) to
-// avoid a socket left stale by an interface renumber/reassociation (e.g.
-// DHCP renewal, wifi roam, or the interface disappearing and reappearing
-// with a new ifindex, as happens when a VPN tunnel is torn down and
-// re-created).
-//
-// Method groups are split across files by concern:
-//   ping_monitor.cpp        - construction, shortIfaceTag
-//   ping_monitor_socket.cpp - socket open/send/recv for v4 and v6
-//   ping_monitor_tick.cpp   - per-tick target/gateway checks, severity
-//   ping_monitor_render.cpp - tray icon/tooltip rendering
+/**
+ * @brief Per-interface ping monitor with a color-coded system tray icon.
+ *
+ * Implements the tray behavior (target resolution, color/glyph rules,
+ * gateway fallback) described in README.md.
+ *
+ * Method groups are split across files by concern:
+ *   ping_monitor.cpp             - construction, shortIfaceTag
+ *   ping_monitor_addr.cpp        - checksum, interface-address helpers
+ *   ping_monitor_socket4.cpp     - IPv4 socket open/send/recv
+ *   ping_monitor_socket6.cpp     - IPv6 socket open/send/recv
+ *   ping_monitor_tick.cpp        - per-tick target/gateway checks, severity
+ *   ping_monitor_status_text.cpp - status/severity computation, tooltip text
+ *   ping_monitor_icon.cpp        - QPainter/QIcon pixmap rendering
+ */
 class PingMonitor : public QObject
 {
     Q_OBJECT
 public:
-    PingMonitor(QString iface, QString target, QString target6, QString label);
+    /**
+     * @param iface Interface to bind ICMP sockets to.
+     * @param target Literal IPv4/IPv6 address or hostname; a hostname
+     *   resolving to both an A and AAAA record enables independent v4/v6
+     *   checks on the same interface.
+     * @param target6 Additional literal IPv6 target (or hostname) merged in
+     *   alongside whatever `target` resolves to -- lets a default IPv6
+     *   target reach this monitor without overriding a literal-IPv4 `target`.
+     * @param label Human-readable name shown in the tray tooltip/menu.
+     * @param gatewayIpOverride4 Overrides or disables the IPv4 gateway
+     *   fallback check; see GatewayOverride.
+     * @param gatewayIpOverride6 Overrides or disables the IPv6 gateway
+     *   fallback check; see GatewayOverride.
+     */
+    PingMonitor(QString iface, QString target, QString target6, QString label, QString gatewayIpOverride4, QString gatewayIpOverride6);
 
 private:
     enum class Severity {
@@ -80,6 +74,7 @@ private:
         // Gateway reachability, checked only while the target itself is
         // failing (see tickV4()/tickV6()) -- an extra ping incurred only
         // during an outage, not adding to steady-state per-tick cost.
+        GatewayOverride::Mode gatewayMode = GatewayOverride::Mode::Auto;
         QString gatewayIp;
         bool gatewayResolved = false;
         bool gatewayReachable = false;
@@ -95,6 +90,7 @@ private:
     static Severity severityOf(const ProtoTrack &t);
 
     void resolveInitialTargets(const QString &target, const QString &target6);
+    void applyGatewayOverride(ProtoTrack &t, const QString &gatewayIpOverride);
     void setupTray();
 
     void openSocket4();

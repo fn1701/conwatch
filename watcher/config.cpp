@@ -44,6 +44,15 @@ exclude:
   - "br-*"
 
 # Per-interface overrides, keyed by exact interface name. Optional.
+#
+# gateway_ip_override4/6 override how the "blue" (gateway-reachable)
+# check sources its gateway for that protocol, instead of resolving the
+# interface's kernel default route: a literal IP pins the gateway to
+# ping, and "none" disables the check entirely (severity goes straight
+# from yellow to red past the loss threshold, never blue). Useful for a
+# tunnel interface (e.g. WireGuard) that routes a private subnet without
+# carrying a default route.
+#
 # Example:
 # interfaces:
 #   wlan0:
@@ -52,6 +61,8 @@ exclude:
 #     label: "VPN"
 #     target: "10.10.0.1"
 #     target6: "fd00::1"
+#     gateway_ip_override4: "10.10.0.1"
+#     gateway_ip_override6: "none"
 interfaces: {}
 )YAML";
 
@@ -62,7 +73,7 @@ public:
     static std::string resolvePath()
     {
         const char *xdgConfig = std::getenv("XDG_CONFIG_HOME");
-        fs::path base = (xdgConfig && *xdgConfig) ? fs::path(xdgConfig) : homeConfigDir();
+        fs::path base = ((xdgConfig != nullptr) && ((*xdgConfig) != 0)) ? fs::path(xdgConfig) : homeConfigDir();
         return (base / "conwatch" / "config.yaml").string();
     }
 
@@ -71,8 +82,9 @@ public:
     // a new file was created.
     static bool ensureExists(const std::string &path)
     {
-        if (fs::exists(path))
+        if (fs::exists(path)) {
             return false;
+        }
 
         fs::path p(path);
         fs::create_directories(p.parent_path());
@@ -86,7 +98,7 @@ private:
     static fs::path homeConfigDir()
     {
         const char *home = std::getenv("HOME");
-        return fs::path(home ? home : ".") / ".config";
+        return fs::path((home != nullptr) ? home : ".") / ".config";
     }
 
     static void writeDefaultConfig(const fs::path &p)

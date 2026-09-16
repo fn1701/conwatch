@@ -9,6 +9,8 @@ struct InterfaceOverride {
     std::string label;
     std::optional<std::string> target;
     std::optional<std::string> target6;
+    std::optional<std::string> gatewayIpOverride4;
+    std::optional<std::string> gatewayIpOverride6;
 };
 
 struct Config {
@@ -49,3 +51,11 @@ std::string resolveLabel(const Config &cfg, const std::string &iface);
 // default_target6). Empty string if neither is set -- conwatch-tray
 // treats an empty target6 argv as "not provided".
 std::string resolveTarget6(const Config &cfg, const std::string &iface);
+
+// Resolves the effective gateway_ip_override4/6 for a given interface, if
+// any. Per-interface only (no config-wide default, since a fixed gateway
+// or disabled check is inherently specific to one interface). Empty string
+// if unset -- conwatch-tray treats an empty override argv as "not
+// provided" (auto-resolve), same convention as target6.
+std::string resolveGatewayIpOverride4(const Config &cfg, const std::string &iface);
+std::string resolveGatewayIpOverride6(const Config &cfg, const std::string &iface);

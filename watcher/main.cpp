@@ -4,10 +4,10 @@
 // state directly, so it works regardless of which (if any) network
 // manager is running.
 //
-// Spawns/kills `conwatch-tray <iface> <target> <target6> <label>`
-// child processes as interfaces matching the config's include/exclude
-// rules go operationally up/down. See ../README.md for the config
-// schema.
+// Spawns/kills `conwatch-tray <iface> <target> <target6> <label>
+// <gateway_ip_override4> <gateway_ip_override6>` child processes as
+// interfaces matching the config's include/exclude rules go operationally
+// up/down. See ../README.md for the config schema.
 
 #include "config.hpp"
 #include "netlink.hpp"
@@ -150,7 +150,12 @@ private:
     {
         if (!isEligible(m_cfg, name))
             return;
-        m_processes.start(name, resolveTarget(m_cfg, name), resolveTarget6(m_cfg, name), resolveLabel(m_cfg, name));
+        m_processes.start(name,
+                          resolveTarget(m_cfg, name),
+                          resolveTarget6(m_cfg, name),
+                          resolveLabel(m_cfg, name),
+                          resolveGatewayIpOverride4(m_cfg, name),
+                          resolveGatewayIpOverride6(m_cfg, name));
     }
 
     void onRemoved(int ifindex)

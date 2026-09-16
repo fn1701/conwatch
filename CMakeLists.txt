@@ -17,6 +17,7 @@ add_executable(conwatch-tray
     ping_monitor_render.cpp
     target_resolve.cpp
     gateway_resolve.cpp
+    gateway_override.cpp
 )
 target_link_libraries(conwatch-tray PRIVATE Qt6::Widgets)
 
@@ -41,11 +42,13 @@ if(CONWATCH_BUILD_TESTS)
         tests/config_test.cpp
         tests/target_resolve_test.cpp
         tests/gateway_resolve_test.cpp
+        tests/gateway_override_test.cpp
         watcher/config.cpp
         watcher/config_load.cpp
         watcher/config_resolve.cpp
         target_resolve.cpp
         gateway_resolve.cpp
+        gateway_override.cpp
     )
     target_link_libraries(conwatch_tests PRIVATE yaml-cpp::yaml-cpp GTest::gtest GTest::gtest_main)
 

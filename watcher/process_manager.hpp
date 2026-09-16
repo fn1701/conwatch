@@ -10,10 +10,16 @@
 class ProcessManager
 {
 public:
-    // Spawns `conwatch-tray <iface> <target> <target6> <label>` if not
-    // already running for `iface`. `target6` may be empty (not provided).
-    // No-op if already tracked.
-    void start(const std::string &iface, const std::string &target, const std::string &target6, const std::string &label);
+    // Spawns `conwatch-tray <iface> <target> <target6> <label>
+    // <gatewayIpOverride4> <gatewayIpOverride6>` if not already running for
+    // `iface`. `target6`, `gatewayIpOverride4`, and `gatewayIpOverride6` may
+    // be empty (not provided). No-op if already tracked.
+    void start(const std::string &iface,
+               const std::string &target,
+               const std::string &target6,
+               const std::string &label,
+               const std::string &gatewayIpOverride4,
+               const std::string &gatewayIpOverride6);
 
     // Sends SIGTERM to the tracked child for `iface` and stops
     // tracking it immediately (actual exit is reaped asynchronously

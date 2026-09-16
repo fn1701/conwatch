@@ -1,5 +1,7 @@
 #pragma once
 
+#include "gateway_override.hpp"
+
 #include <QColor>
 #include <QIcon>
 #include <QObject>
@@ -33,7 +35,11 @@ struct ifaddrs;
 //   blue   - 10+ consecutive losses, but the interface's default gateway
 //            for that protocol responds -- local network is fine, problem
 //            is upstream of the gateway or specific to the target
-//   red    - 10+ consecutive losses, gateway unreachable too
+//   red    - 10+ consecutive losses, gateway unreachable too (or its
+//            gateway check is disabled, see gateway_override.hpp)
+//
+// <gatewayIpOverride4>/<gatewayIpOverride6> are parsed via GatewayOverride
+// (gateway_override.hpp) to override the blue check's gateway source.
 //
 // The glyph ("4", "6", "4/6", or blank) reflects which protocol(s) are
 // CURRENTLY succeeding, not just configured -- it shrinks/grows as
@@ -55,7 +61,7 @@ class PingMonitor : public QObject
 {
     Q_OBJECT
 public:
-    PingMonitor(QString iface, QString target, QString target6, QString label);
+    PingMonitor(QString iface, QString target, QString target6, QString label, QString gatewayIpOverride4, QString gatewayIpOverride6);
 
 private:
     enum class Severity {
@@ -80,6 +86,7 @@ private:
         // Gateway reachability, checked only while the target itself is
         // failing (see tickV4()/tickV6()) -- an extra ping incurred only
         // during an outage, not adding to steady-state per-tick cost.
+        GatewayOverride::Mode gatewayMode = GatewayOverride::Mode::Auto;
         QString gatewayIp;
         bool gatewayResolved = false;
         bool gatewayReachable = false;
@@ -95,6 +102,7 @@ private:
     static Severity severityOf(const ProtoTrack &t);
 
     void resolveInitialTargets(const QString &target, const QString &target6);
+    void applyGatewayOverride(ProtoTrack &t, const QString &gatewayIpOverride);
     void setupTray();
 
     void openSocket4();

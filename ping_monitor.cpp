@@ -11,7 +11,7 @@
 
 #include <unistd.h>
 
-PingMonitor::PingMonitor(QString iface, QString target, QString target6, QString label)
+PingMonitor::PingMonitor(QString iface, QString target, QString target6, QString label, QString gatewayIpOverride4, QString gatewayIpOverride6)
     : m_iface(std::move(iface))
     , m_label(std::move(label))
 {
@@ -19,6 +19,8 @@ PingMonitor::PingMonitor(QString iface, QString target, QString target6, QString
     m_ifaceTag = shortIfaceTag(m_iface);
 
     resolveInitialTargets(target, target6);
+    applyGatewayOverride(m_v4, gatewayIpOverride4);
+    applyGatewayOverride(m_v6, gatewayIpOverride6);
     setupTray();
 
     if (m_v4.configured)
@@ -52,6 +54,20 @@ void PingMonitor::resolveInitialTargets(const QString &target, const QString &ta
             m_v6.targetIp = QString::fromStdString(*resolved6.v6);
             m_v6.configured = true;
         }
+    }
+}
+
+// Applies a parsed gateway_ip_override4/6 config value to `t`: Fixed mode
+// pins gatewayIp/gatewayResolved so checkGateway4()/checkGateway6() never
+// call resolveGateway(); Disabled/Auto just record the mode for severityOf()
+// and checkGateway4()/checkGateway6() to act on.
+void PingMonitor::applyGatewayOverride(ProtoTrack &t, const QString &gatewayIpOverride)
+{
+    GatewayOverride override(gatewayIpOverride.toStdString());
+    t.gatewayMode = override.mode();
+    if (t.gatewayMode == GatewayOverride::Mode::Fixed) {
+        t.gatewayIp = QString::fromStdString(override.fixedIp());
+        t.gatewayResolved = true;
     }
 }
 

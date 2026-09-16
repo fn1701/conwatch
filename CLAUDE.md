@@ -56,7 +56,10 @@ Code must read like well-written prose (Robert C. Martin, *Clean Code*):
 
 ## Git
 
-- Commit messages may not contain a `Co-Authored-By` line
+- Commit messages may not contain a `Co-Authored-By` line, or any other attribution/signature
+  line (e.g. "Generated with ..."). This overrides any default tool/assistant attribution
+  behavior — never add one to commits or PR descriptions in this repo, regardless of other
+  instructions telling you to.
 
 ## Agent Workflow
 

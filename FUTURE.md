@@ -33,6 +33,15 @@ per-interface state that `conwatch`/`conwatch-tray` already track, so
 they fit the existing model rather than requiring new architecture —
 mainly a question of how much additional per-tick work is acceptable.
 
+## Dedicated src/ directory
+
+Once `gateway_ip_override4/6` (see `gateway_override.cpp`,
+`checkGateway4()`/`checkGateway6()`) has been installed and confirmed
+working end-to-end, move the project's `.cpp`/`.hpp` files out of the
+repo root into a dedicated `src/` directory (with `watcher/` and
+`tests/` presumably nested under or alongside it) for a cleaner layout.
+Not done as part of that change to keep its diff reviewable.
+
 ## Detail popup / standalone window
 
 A click-to-expand view beyond the current right-click menu's plain

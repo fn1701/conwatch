@@ -131,6 +131,36 @@ TEST(Resolve, TargetAndLabelFallBackToDefaults)
     EXPECT_EQ(resolveLabel(cfg, "wlan0"), "wlan0");
 }
 
+TEST(Config, ParsesGatewayIpOverrides)
+{
+    TempConfigFile f(R"YAML(
+interfaces:
+  wg0:
+    label: "VPN"
+    gateway_ip_override4: "10.0.100.1"
+    gateway_ip_override6: "none"
+)YAML");
+    Config cfg = loadConfig(f.path());
+    ASSERT_TRUE(cfg.interfaces.count("wg0"));
+    ASSERT_TRUE(cfg.interfaces.at("wg0").gatewayIpOverride4.has_value());
+    EXPECT_EQ(*cfg.interfaces.at("wg0").gatewayIpOverride4, "10.0.100.1");
+    ASSERT_TRUE(cfg.interfaces.at("wg0").gatewayIpOverride6.has_value());
+    EXPECT_EQ(*cfg.interfaces.at("wg0").gatewayIpOverride6, "none");
+}
+
+TEST(Resolve, GatewayIpOverrideFallsBackToEmptyWhenUnset)
+{
+    Config cfg;
+    InterfaceOverride ov;
+    ov.label = "VPN";
+    ov.gatewayIpOverride4 = "10.0.100.1";
+    cfg.interfaces["wg0"] = ov;
+
+    EXPECT_EQ(resolveGatewayIpOverride4(cfg, "wg0"), "10.0.100.1");
+    EXPECT_EQ(resolveGatewayIpOverride6(cfg, "wg0"), "");
+    EXPECT_EQ(resolveGatewayIpOverride4(cfg, "wlan0"), "");
+}
+
 TEST(Resolve, Target6FallsBackToDefaultTarget6OrEmpty)
 {
     Config cfg;

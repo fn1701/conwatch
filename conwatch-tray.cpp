@@ -1,6 +1,6 @@
 // conwatch-tray entry point. See ping_monitor.hpp for the monitor's design.
 //
-// Usage: conwatch-tray <interface> <target> <target6> [label]
+// Usage: conwatch-tray <interface> <target> <target6> [label] [gateway_ip_override4] [gateway_ip_override6]
 
 #include "ping_monitor.hpp"
 
@@ -41,7 +41,9 @@ int main(int argc, char *argv[])
     QString target = argv[2];
     QString target6 = argc >= 4 ? argv[3] : QString();
     QString label = argc >= 5 ? argv[4] : iface;
+    QString gatewayIpOverride4 = argc >= 6 ? argv[5] : QString();
+    QString gatewayIpOverride6 = argc >= 7 ? argv[6] : QString();
 
-    PingMonitor monitor(iface, target, target6, label);
+    PingMonitor monitor(iface, target, target6, label, gatewayIpOverride4, gatewayIpOverride6);
     return app.exec();
 }

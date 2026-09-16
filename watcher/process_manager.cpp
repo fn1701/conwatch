@@ -5,10 +5,16 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-void ProcessManager::start(const std::string &iface, const std::string &target, const std::string &target6, const std::string &label)
+void ProcessManager::start(const std::string &iface,
+                           const std::string &target,
+                           const std::string &target6,
+                           const std::string &label,
+                           const std::string &gatewayIpOverride4,
+                           const std::string &gatewayIpOverride6)
 {
-    if (isRunning(iface))
+    if (isRunning(iface)) {
         return;
+    }
 
     pid_t pid = fork();
     if (pid < 0) {
@@ -25,7 +31,15 @@ void ProcessManager::start(const std::string &iface, const std::string &target, 
         sigemptyset(&empty);
         sigprocmask(SIG_SETMASK, &empty, nullptr);
 
-        execlp("/usr/local/bin/conwatch-tray", "conwatch-tray", iface.c_str(), target.c_str(), target6.c_str(), label.c_str(), static_cast<char *>(nullptr));
+        execlp("/usr/local/bin/conwatch-tray",
+               "conwatch-tray",
+               iface.c_str(),
+               target.c_str(),
+               target6.c_str(),
+               label.c_str(),
+               gatewayIpOverride4.c_str(),
+               gatewayIpOverride6.c_str(),
+               static_cast<char *>(nullptr));
         _exit(127); // exec failed
     }
 
@@ -37,8 +51,9 @@ void ProcessManager::start(const std::string &iface, const std::string &target, 
 void ProcessManager::stop(const std::string &iface)
 {
     auto it = m_byIface.find(iface);
-    if (it == m_byIface.end())
+    if (it == m_byIface.end()) {
         return;
+    }
 
     pid_t pid = it->second;
     kill(pid, SIGTERM);
@@ -50,8 +65,8 @@ void ProcessManager::stop(const std::string &iface)
 
 void ProcessManager::reapExited()
 {
-    int status;
-    pid_t pid;
+    int status = 0;
+    pid_t pid = 0;
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
         auto it = m_byPid.find(pid);
         if (it != m_byPid.end()) {
@@ -70,7 +85,7 @@ void ProcessManager::stopAll()
     // Blocking wait, bounded by iteration count rather than wall clock
     // to avoid pulling in a timer for a shutdown path executed once.
     for (int i = 0; i < 200 && !m_byPid.empty(); ++i) {
-        int status;
+        int status = 0;
         pid_t pid = waitpid(-1, &status, 0);
         if (pid > 0) {
             auto it = m_byPid.find(pid);

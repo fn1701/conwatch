@@ -31,6 +31,22 @@ public:
             return *it->second.target6;
         return cfg.defaultTarget6.value_or("");
     }
+
+    static std::string gatewayIpOverride4(const Config &cfg, const std::string &iface)
+    {
+        auto it = cfg.interfaces.find(iface);
+        if (it != cfg.interfaces.end() && it->second.gatewayIpOverride4)
+            return *it->second.gatewayIpOverride4;
+        return "";
+    }
+
+    static std::string gatewayIpOverride6(const Config &cfg, const std::string &iface)
+    {
+        auto it = cfg.interfaces.find(iface);
+        if (it != cfg.interfaces.end() && it->second.gatewayIpOverride6)
+            return *it->second.gatewayIpOverride6;
+        return "";
+    }
 };
 
 } // namespace
@@ -54,4 +70,18 @@ std::string resolveLabel(const Config &cfg, const std::string &iface)
 std::string resolveTarget6(const Config &cfg, const std::string &iface)
 {
     return ConfigResolver::target6(cfg, iface);
+}
+
+// Free function kept as the public API contract declared in
+// config.hpp; the real implementation is ConfigResolver above.
+std::string resolveGatewayIpOverride4(const Config &cfg, const std::string &iface)
+{
+    return ConfigResolver::gatewayIpOverride4(cfg, iface);
+}
+
+// Free function kept as the public API contract declared in
+// config.hpp; the real implementation is ConfigResolver above.
+std::string resolveGatewayIpOverride6(const Config &cfg, const std::string &iface)
+{
+    return ConfigResolver::gatewayIpOverride6(cfg, iface);
 }

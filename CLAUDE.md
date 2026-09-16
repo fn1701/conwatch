@@ -40,6 +40,10 @@ The goal is modular, reusable units — size limits are a signal, not the object
 
 - Methods must not exceed **20 lines of code** — split by business logic into multiple well-named methods, or extract named helpers
 - Source files (`.cpp`) must not exceed **150 lines** — split by concern into multiple files
+- If a private class defined inline in an anonymous namespace grows past 150 lines, promote it out of
+  the anonymous namespace into its own named namespace (signaling "implementation detail, not public
+  API"), with a declaration in one `.hpp` and its definitions split across as many `.cpp` files as
+  needed to keep each under 150 lines
 - The 150-line guideline extends to `.py`/`.sh` files as far as sensible (test modules, GitLab API scripts) — a signal to split by concern, not a hard gate; data/fixture-heavy scripts may reasonably exceed it
 
 ## Comments and Readability (Clean Code)
@@ -50,6 +54,7 @@ Code must read like well-written prose (Robert C. Martin, *Clean Code*):
 - **Meaningful names** — prefer a longer descriptive name over a short name plus a comment
 - **Small, focused functions** — if a function needs a block comment to explain a section, extract that section into a named function instead
 - **`/** */` doc comments are allowed** on public API (classes, public methods) to describe intent, parameters, or non-obvious contracts — not to restate the signature
+- Public methods (and classes) use Doxygen-style `/** */` comments (`@param`, `@return`, etc. as needed) — add or update them whenever you add or edit a public method
 - **`//` inline comments** only for *why*: hidden constraints, workarounds, non-obvious invariants, trade-off rationale
 - `// TODO #<issue> short description` for known open issues — always include the issue number
 - One-line comment above a `.cpp` method group is acceptable when it lives in a split file

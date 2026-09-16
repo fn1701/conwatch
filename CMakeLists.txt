@@ -44,7 +44,10 @@ if(CONWATCH_BUILD_TESTS)
     enable_testing()
 
     add_executable(conwatch_tests
-        tests/config_test.cpp
+        tests/config_load_test.cpp
+        tests/config_eligibility_test.cpp
+        tests/config_resolve_test.cpp
+        tests/temp_config_file.cpp
         tests/target_resolve_test.cpp
         tests/gateway_resolve_test.cpp
         tests/gateway_override_test.cpp

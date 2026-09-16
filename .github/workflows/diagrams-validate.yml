@@ -55,7 +55,7 @@ jobs:
             --format svg,png
 
       - name: Upload generated diagrams
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: clang-uml-diagrams
           path: docs/diagrams/

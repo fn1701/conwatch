@@ -27,6 +27,7 @@ target_link_libraries(conwatch-tray PRIVATE Qt6::Widgets)
 add_executable(conwatch
     src/watcher/main.cpp
     src/watcher/watcher.cpp
+    src/watcher/watcher_iface_state.cpp
     src/watcher/netlink.cpp
     src/watcher/config.cpp
     src/watcher/config_load.cpp

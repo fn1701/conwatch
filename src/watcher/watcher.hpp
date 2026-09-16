@@ -18,6 +18,10 @@ struct IfaceState {
 // to SIGCHLD/SIGTERM/SIGINT via a signalfd read inside the same loop
 // (not an async-signal-handler context, so plain member state is safe
 // in place of a volatile sig_atomic_t global).
+//
+// Method groups are split across files by concern:
+//   watcher.cpp             - construction, poll loop, signal handling
+//   watcher_iface_state.cpp - per-interface up/down/rename state machine
 class Watcher
 {
 public:

@@ -10,24 +10,24 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(yaml-cpp REQUIRED)
 
 add_executable(conwatch-tray
-    conwatch-tray.cpp
-    ping_monitor.cpp
-    ping_monitor_socket.cpp
-    ping_monitor_tick.cpp
-    ping_monitor_render.cpp
-    target_resolve.cpp
-    gateway_resolve.cpp
-    gateway_override.cpp
+    src/conwatch-tray.cpp
+    src/ping_monitor.cpp
+    src/ping_monitor_socket.cpp
+    src/ping_monitor_tick.cpp
+    src/ping_monitor_render.cpp
+    src/target_resolve.cpp
+    src/gateway_resolve.cpp
+    src/gateway_override.cpp
 )
 target_link_libraries(conwatch-tray PRIVATE Qt6::Widgets)
 
 add_executable(conwatch
-    watcher/main.cpp
-    watcher/netlink.cpp
-    watcher/config.cpp
-    watcher/config_load.cpp
-    watcher/config_resolve.cpp
-    watcher/process_manager.cpp
+    src/watcher/main.cpp
+    src/watcher/netlink.cpp
+    src/watcher/config.cpp
+    src/watcher/config_load.cpp
+    src/watcher/config_resolve.cpp
+    src/watcher/process_manager.cpp
 )
 target_link_libraries(conwatch PRIVATE yaml-cpp::yaml-cpp)
 # Deliberately no Qt linkage here -- the watcher is a lean POSIX daemon
@@ -43,12 +43,12 @@ if(CONWATCH_BUILD_TESTS)
         tests/target_resolve_test.cpp
         tests/gateway_resolve_test.cpp
         tests/gateway_override_test.cpp
-        watcher/config.cpp
-        watcher/config_load.cpp
-        watcher/config_resolve.cpp
-        target_resolve.cpp
-        gateway_resolve.cpp
-        gateway_override.cpp
+        src/watcher/config.cpp
+        src/watcher/config_load.cpp
+        src/watcher/config_resolve.cpp
+        src/target_resolve.cpp
+        src/gateway_resolve.cpp
+        src/gateway_override.cpp
     )
     target_link_libraries(conwatch_tests PRIVATE yaml-cpp::yaml-cpp GTest::gtest GTest::gtest_main)
 

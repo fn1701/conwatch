@@ -6,10 +6,10 @@ diagrams:
     type: class
     title: PingMonitor - Class Diagram
     glob:
-      - ping_monitor.cpp
-      - ping_monitor_socket.cpp
-      - ping_monitor_tick.cpp
-      - ping_monitor_render.cpp
+      - src/ping_monitor.cpp
+      - src/ping_monitor_socket.cpp
+      - src/ping_monitor_tick.cpp
+      - src/ping_monitor_render.cpp
     exclude:
       namespaces:
         - std
@@ -19,12 +19,12 @@ diagrams:
     type: class
     title: Watcher - Class Diagram
     glob:
-      - watcher/main.cpp
-      - watcher/netlink.cpp
-      - watcher/config.cpp
-      - watcher/config_load.cpp
-      - watcher/config_resolve.cpp
-      - watcher/process_manager.cpp
+      - src/watcher/main.cpp
+      - src/watcher/netlink.cpp
+      - src/watcher/config.cpp
+      - src/watcher/config_load.cpp
+      - src/watcher/config_resolve.cpp
+      - src/watcher/process_manager.cpp
     exclude:
       namespaces:
         - std
@@ -34,8 +34,8 @@ diagrams:
     type: sequence
     title: PingMonitor::tick() - Sequence Diagram
     glob:
-      - ping_monitor_tick.cpp
-      - ping_monitor_socket.cpp
+      - src/ping_monitor_tick.cpp
+      - src/ping_monitor_socket.cpp
     exclude:
       namespaces:
         - std
@@ -46,12 +46,12 @@ diagrams:
     type: sequence
     title: Watcher main() - Sequence Diagram
     glob:
-      - watcher/main.cpp
-      - watcher/netlink.cpp
-      - watcher/config.cpp
-      - watcher/config_load.cpp
-      - watcher/config_resolve.cpp
-      - watcher/process_manager.cpp
+      - src/watcher/main.cpp
+      - src/watcher/netlink.cpp
+      - src/watcher/config.cpp
+      - src/watcher/config_load.cpp
+      - src/watcher/config_resolve.cpp
+      - src/watcher/process_manager.cpp
     exclude:
       namespaces:
         - std
@@ -62,8 +62,8 @@ diagrams:
     type: sequence
     title: Target/Gateway Resolution - Sequence Diagram
     glob:
-      - target_resolve.cpp
-      - gateway_resolve.cpp
+      - src/target_resolve.cpp
+      - src/gateway_resolve.cpp
     exclude:
       namespaces:
         - std

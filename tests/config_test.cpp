@@ -1,4 +1,4 @@
-#include "../watcher/config.hpp"
+#include "../src/watcher/config.hpp"
 
 #include <cstdio>
 #include <filesystem>

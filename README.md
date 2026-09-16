@@ -17,14 +17,14 @@ follows these rules, checked in order:
 - **blue** — no active protocol is green or yellow, but at least one
   has 10+ consecutive losses with its gateway still responding. The
   gateway is normally the interface's default route (resolved once via
-  a netlink `RTM_GETROUTE` dump, see `gateway_resolve.cpp`), but can be
+  a netlink `RTM_GETROUTE` dump, see `src/gateway_resolve.cpp`), but can be
   pinned to a fixed IP or disabled entirely per-protocol via the
   `gateway_ip_override4`/`gateway_ip_override6` config keys (see
-  `gateway_override.cpp`) -- e.g. for a tunnel whose only route isn't a
+  `src/gateway_override.cpp`) -- e.g. for a tunnel whose only route isn't a
   default route. Checked only once a protocol is already failing, so
   it's an extra ping incurred only during an outage, not adding to
   steady-state per-tick cost. See `checkGateway4()`/`checkGateway6()`
-  and `severityOf()` in `conwatch-tray.cpp`.
+  and `severityOf()` in `src/conwatch-tray.cpp`.
 - **red** — every active protocol has independently failed both its
   target and its gateway (10+ consecutive losses with the gateway
   unreachable too, or no default route at all for that family). The
@@ -271,7 +271,7 @@ network management daemon — it works directly against the kernel.
 - Per-interface `conwatch-tray` children are spawned via
   `fork()`+`execlp()` from a fixed path (`/usr/local/bin/conwatch-tray`);
   a different install location currently requires editing
-  `process_manager.cpp`.
+  `src/watcher/process_manager.cpp`.
 - `conwatch-tray`'s own behavior (ICMP ping logic, socket recreation,
   tray icon rendering) has no automated test coverage — it needs a
   display and a D-Bus tray host, which a CI container doesn't provide.

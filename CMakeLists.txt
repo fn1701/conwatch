@@ -10,7 +10,7 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(yaml-cpp REQUIRED)
 
 add_executable(conwatch-tray
-    src/conwatch-tray/conwatch-tray.cpp
+    src/conwatch-tray/main.cpp
     src/conwatch-tray/ping_monitor.cpp
     src/conwatch-tray/ping_monitor_addr.cpp
     src/conwatch-tray/ping_monitor_socket4.cpp

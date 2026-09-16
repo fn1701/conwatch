@@ -20,7 +20,7 @@ jobs:
   generate-diagrams:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure (compile_commands.json only, no build needed)
         # Runs inside the same archlinux:latest toolchain as the main CI

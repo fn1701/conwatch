@@ -1,6 +1,6 @@
 #include "ping_monitor.hpp"
 
-#include "gateway_resolve.hpp"
+#include "../shared/gateway_resolve.hpp"
 
 #include <net/if.h>
 #include <netinet/in.h>

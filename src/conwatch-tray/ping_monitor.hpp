@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gateway_override.hpp"
+#include "../shared/gateway_override.hpp"
 
 #include <QColor>
 #include <QIcon>

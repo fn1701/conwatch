@@ -16,15 +16,12 @@ follows these rules, checked in order:
   1-9 consecutive losses.
 - **blue** — no active protocol is green or yellow, but at least one
   has 10+ consecutive losses with its gateway still responding. The
-  gateway is normally the interface's default route (resolved once via
-  a netlink `RTM_GETROUTE` dump, see `src/gateway_resolve.cpp`), but can be
+  gateway is normally the interface's default route, but can be
   pinned to a fixed IP or disabled entirely per-protocol via the
-  `gateway_ip_override4`/`gateway_ip_override6` config keys (see
-  `src/gateway_override.cpp`) -- e.g. for a tunnel whose only route isn't a
-  default route. Checked only once a protocol is already failing, so
-  it's an extra ping incurred only during an outage, not adding to
-  steady-state per-tick cost. See `checkGateway4()`/`checkGateway6()`
-  and `severityOf()` in `src/conwatch-tray.cpp`.
+  `gateway_ip_override4`/`gateway_ip_override6` config keys -- e.g. for
+  a tunnel whose only route isn't a default route. Checked only once a
+  protocol is already failing, so it's an extra ping incurred only
+  during an outage, not adding to steady-state per-tick cost.
 - **red** — every active protocol has independently failed both its
   target and its gateway (10+ consecutive losses with the gateway
   unreachable too, or no default route at all for that family). The

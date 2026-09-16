@@ -5,14 +5,15 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-void ProcessManager::start(const std::string &iface,
+void ProcessManager::start(int ifindex,
+                           const std::string &iface,
                            const std::string &target,
                            const std::string &target6,
                            const std::string &label,
                            const std::string &gatewayIpOverride4,
                            const std::string &gatewayIpOverride6)
 {
-    if (isRunning(iface)) {
+    if (isRunning(ifindex)) {
         return;
     }
 
@@ -44,23 +45,23 @@ void ProcessManager::start(const std::string &iface,
     }
 
     fprintf(stderr, "conwatch: started conwatch-tray for %s (pid %d)\n", iface.c_str(), pid);
-    m_byIface[iface] = pid;
-    m_byPid[pid] = iface;
+    m_byIfindex[ifindex] = {pid, iface};
+    m_ifindexByPid[pid] = ifindex;
 }
 
-void ProcessManager::stop(const std::string &iface)
+void ProcessManager::stop(int ifindex)
 {
-    auto it = m_byIface.find(iface);
-    if (it == m_byIface.end()) {
+    auto it = m_byIfindex.find(ifindex);
+    if (it == m_byIfindex.end()) {
         return;
     }
 
-    pid_t pid = it->second;
+    pid_t pid = it->second.pid;
     kill(pid, SIGTERM);
-    fprintf(stderr, "conwatch: stopping conwatch-tray for %s (pid %d)\n", iface.c_str(), pid);
+    fprintf(stderr, "conwatch: stopping conwatch-tray for %s (pid %d)\n", it->second.iface.c_str(), pid);
 
-    m_byIface.erase(it);
-    m_byPid.erase(pid);
+    m_ifindexByPid.erase(pid);
+    m_byIfindex.erase(it);
 }
 
 void ProcessManager::reapExited()
@@ -68,30 +69,30 @@ void ProcessManager::reapExited()
     int status = 0;
     pid_t pid = 0;
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-        auto it = m_byPid.find(pid);
-        if (it != m_byPid.end()) {
-            m_byIface.erase(it->second);
-            m_byPid.erase(it);
+        auto it = m_ifindexByPid.find(pid);
+        if (it != m_ifindexByPid.end()) {
+            m_byIfindex.erase(it->second);
+            m_ifindexByPid.erase(it);
         }
     }
 }
 
 void ProcessManager::stopAll()
 {
-    for (const auto &[pid, iface] : m_byPid) {
+    for (const auto &[pid, ifindex] : m_ifindexByPid) {
         kill(pid, SIGTERM);
     }
 
     // Blocking wait, bounded by iteration count rather than wall clock
     // to avoid pulling in a timer for a shutdown path executed once.
-    for (int i = 0; i < 200 && !m_byPid.empty(); ++i) {
+    for (int i = 0; i < 200 && !m_ifindexByPid.empty(); ++i) {
         int status = 0;
         pid_t pid = waitpid(-1, &status, 0);
         if (pid > 0) {
-            auto it = m_byPid.find(pid);
-            if (it != m_byPid.end()) {
-                m_byIface.erase(it->second);
-                m_byPid.erase(it);
+            auto it = m_ifindexByPid.find(pid);
+            if (it != m_ifindexByPid.end()) {
+                m_byIfindex.erase(it->second);
+                m_ifindexByPid.erase(it);
             }
         } else {
             break; // no more children (ECHILD) or an error
@@ -99,7 +100,7 @@ void ProcessManager::stopAll()
     }
 }
 
-bool ProcessManager::isRunning(const std::string &iface) const
+bool ProcessManager::isRunning(int ifindex) const
 {
-    return m_byIface.find(iface) != m_byIface.end();
+    return m_byIfindex.find(ifindex) != m_byIfindex.end();
 }

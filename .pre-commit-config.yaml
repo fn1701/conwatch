@@ -58,7 +58,7 @@ repos:
   # a harmless "N warnings suppressed in non-user code" notice) unless
   # --fix-errors is passed.
   - repo: https://github.com/pocc/pre-commit-hooks
-    rev: v1.3.5
+    rev: v1.4.0
     hooks:
       - id: clang-tidy
         name: Lint C++ code with clang-tidy
